@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from typing import Any, Callable
 
 import httpx
@@ -14,12 +15,59 @@ from langchain_openai import ChatOpenAI
 logger = logging.getLogger(__name__)
 
 
-def _post_tool(http: httpx.Client, path: str, body: dict[str, Any]) -> str:
-    r = http.post(path, json=body)
+def _post_tool(
+    http: httpx.Client,
+    path: str,
+    body: dict[str, Any],
+    *,
+    correlation_id: str = "-",
+) -> str:
+    cid = correlation_id or "-"
+    t_req = time.perf_counter()
+    logger.info("[agente] tool_laravel_inicio correlation_id=%s path=%s", cid, path)
+    try:
+        r = http.post(path, json=body)
+    except httpx.ConnectError as e:
+        logger.error(
+            "[agente] tool_laravel_connect_error correlation_id=%s path=%s erro=%s",
+            cid,
+            path,
+            e,
+        )
+        return json.dumps({"erro": f"connect:{e!s}", "http_status": None}, ensure_ascii=False)
+    except httpx.TimeoutException as e:
+        logger.error(
+            "[agente] tool_laravel_timeout correlation_id=%s path=%s erro=%s",
+            cid,
+            path,
+            e,
+        )
+        return json.dumps({"erro": f"timeout:{e!s}", "http_status": None}, ensure_ascii=False)
+    except Exception as e:
+        logger.exception("[agente] tool_laravel_erro correlation_id=%s path=%s", cid, path)
+        return json.dumps({"erro": str(e), "tipo": type(e).__name__}, ensure_ascii=False)
+
+    elapsed_ms = round((time.perf_counter() - t_req) * 1000, 2)
     try:
         data = r.json()
     except Exception:
         data = {"raw": r.text[:500]}
+    if r.status_code >= 400:
+        logger.warning(
+            "[agente] tool_laravel_resposta_erro correlation_id=%s path=%s http_status=%s ms=%s",
+            cid,
+            path,
+            r.status_code,
+            elapsed_ms,
+        )
+    else:
+        logger.info(
+            "[agente] tool_laravel_resposta_ok correlation_id=%s path=%s http_status=%s ms=%s",
+            cid,
+            path,
+            r.status_code,
+            elapsed_ms,
+        )
     out = {"http_status": r.status_code, "body": data}
     return json.dumps(out, ensure_ascii=False)
 
@@ -34,11 +82,22 @@ def run_agent_turn(
     openai_api_key: str,
     openai_model: str | None = None,
     openai_base_url: str | None = None,
+    correlation_id: str | None = None,
 ) -> dict[str, Any]:
+    cid = (correlation_id or "").strip() or "-"
     base = laravel_api_base.rstrip("/")
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     model_name = (openai_model or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini").strip()
     base_url = (openai_base_url or os.environ.get("OPENAI_BASE_URL") or "").strip() or None
+
+    logger.info(
+        "[agente] run_agent_turn_inicio correlation_id=%s conversation_id=%s "
+        "laravel_api_base=%s model=%s",
+        cid,
+        conversation_id,
+        base[:180],
+        model_name,
+    )
 
     with httpx.Client(base_url=base, headers=headers, timeout=120.0) as http:
 
@@ -47,6 +106,7 @@ def run_agent_turn(
                 http,
                 "/agente-atendimento/tools/contexto",
                 {"conversation_id": conversation_id},
+                correlation_id=cid,
             )
 
         def tool_enviar_texto(texto: str) -> str:
@@ -54,6 +114,7 @@ def run_agent_turn(
                 http,
                 "/agente-atendimento/tools/enviar-texto",
                 {"conversation_id": conversation_id, "texto": texto},
+                correlation_id=cid,
             )
 
         def tool_enviar_boleto(parcela_id: int) -> str:
@@ -61,13 +122,19 @@ def run_agent_turn(
                 http,
                 "/agente-atendimento/tools/enviar-boleto",
                 {"conversation_id": conversation_id, "parcela_id": int(parcela_id)},
+                correlation_id=cid,
             )
 
         def tool_enviar_recibo(parcela_id: int | None = None) -> str:
             body: dict[str, Any] = {"conversation_id": conversation_id}
             if parcela_id is not None:
                 body["parcela_id"] = int(parcela_id)
-            return _post_tool(http, "/agente-atendimento/tools/enviar-recibo", body)
+            return _post_tool(
+                http,
+                "/agente-atendimento/tools/enviar-recibo",
+                body,
+                correlation_id=cid,
+            )
 
         tools = [
             {
@@ -185,6 +252,13 @@ def run_agent_turn(
                 name = str(call.get("name", ""))
                 args = dict(call.get("args") or {})
                 tid = str(call.get("id") or f"call_{turn}_{name}")
+                logger.info(
+                    "[agente] llm_tool_call correlation_id=%s turn=%s tool=%s conversation_id=%s",
+                    cid,
+                    turn,
+                    name,
+                    conversation_id,
+                )
                 fn = tool_dispatch.get(name)
                 if fn is None:
                     payload = json.dumps({"erro": f"ferramenta_desconhecida:{name}"}, ensure_ascii=False)
@@ -192,9 +266,20 @@ def run_agent_turn(
                     try:
                         payload = fn(**args)
                     except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "[agente] llm_tool_exec_erro correlation_id=%s tool=%s erro=%s",
+                            cid,
+                            name,
+                            exc,
+                        )
                         payload = json.dumps({"erro": str(exc)}, ensure_ascii=False)
                 messages.append(ToolMessage(content=payload, tool_call_id=tid))
 
-        logger.info("agente_turnos=%s conversation_id=%s", turn + 1, conversation_id)
+        logger.info(
+            "[agente] run_agent_turn_fim correlation_id=%s turnos_llm=%s conversation_id=%s",
+            cid,
+            turn + 1,
+            conversation_id,
+        )
 
         return {"ok": True, "output": last_text}
