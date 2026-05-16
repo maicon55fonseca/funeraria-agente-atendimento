@@ -14,7 +14,7 @@ logger = logging.getLogger("agente_atendimento")
 
 app = FastAPI(title="Agente Atendimento", version="1.0.0")
 
-EXPECTED_TOKEN = (os.environ.get("LARAVEL_AGENT_TOKEN") or "").strip()
+EXPECTED_TOKEN = (os.environ.get("LARAVEL_AGENT_TOKEN") or "").strip().strip("'\"").strip()
 
 
 class ProcessarBody(BaseModel):
@@ -96,8 +96,8 @@ def processar(
 
     from agent_runner import run_agent_turn
 
-    api_key_body = (body.openai_api_key or "").strip()
-    api_key_env = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    api_key_body = (body.openai_api_key or "").strip().strip("'\"").strip()
+    api_key_env = (os.environ.get("OPENAI_API_KEY") or "").strip().strip("'\"").strip()
     api_key = api_key_body or api_key_env
     if not api_key:
         logger.error("[agente] processar_sem_openai_key correlation_id=%s", cid)
