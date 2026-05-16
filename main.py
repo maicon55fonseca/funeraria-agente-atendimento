@@ -134,10 +134,17 @@ def processar(
         raise
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
+    out_output = ""
+    if isinstance(out, dict):
+        out_output = str(out.get("output") or "")
+    preview = (out_output[:6000] + "…") if len(out_output) > 6000 else out_output
     logger.info(
-        "[agente] processar_concluido_ok correlation_id=%s conversation_id=%s duracao_ms=%s",
+        "[agente] processar_concluido_ok correlation_id=%s conversation_id=%s duracao_ms=%s "
+        "openai_output_chars=%s openai_output_texto=%s",
         cid,
         body.conversation_id,
         elapsed_ms,
+        len(out_output),
+        preview or "(vazio)",
     )
     return {"ok": True, "agent": out}

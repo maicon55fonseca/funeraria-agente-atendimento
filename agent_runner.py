@@ -15,6 +15,42 @@ from langchain_openai import ChatOpenAI
 logger = logging.getLogger(__name__)
 
 
+def _safe_log_text(s: str, max_len: int = 4000) -> str:
+    """Encurta e normaliza texto para log (sem vazar conteúdo enorme)."""
+    t = (s or "").replace("\r\n", "\n").strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 3] + "..."
+
+
+def _log_tool_args_para_diagnostico(cid: str, turn: int, name: str, args: dict[str, Any]) -> None:
+    """Diagnóstico: o que o modelo pediu às tools (especialmente texto ao cliente)."""
+    if name == "enviar_mensagem_texto_ao_cliente":
+        preview = _safe_log_text(str(args.get("texto", "")), 3500)
+        logger.info(
+            "[agente] openai_tool_args_enviar_texto correlation_id=%s turn=%s chars=%s texto=%s",
+            cid,
+            turn,
+            len(str(args.get("texto", "") or "")),
+            preview,
+        )
+    elif name == "buscar_contexto_cliente":
+        logger.info(
+            "[agente] openai_tool_args_contexto correlation_id=%s turn=%s motivo=%s",
+            cid,
+            turn,
+            _safe_log_text(str(args.get("motivo", "")), 800),
+        )
+    else:
+        logger.info(
+            "[agente] openai_tool_args correlation_id=%s turn=%s tool=%s args=%s",
+            cid,
+            turn,
+            name,
+            _safe_log_text(json.dumps(args, ensure_ascii=False), 2000),
+        )
+
+
 def _post_tool(
     http: httpx.Client,
     path: str,
@@ -224,10 +260,14 @@ def run_agent_turn(
         system = (
             "Você é o assistente virtual de atendimento no WhatsApp. "
             "Seja cordial, objetivo e em português do Brasil. "
-            "Use a ferramenta buscar_contexto_cliente para obter dados antes de responder sobre contrato ou parcelas. "
-            "Se o cliente pedir boleto ou link para pagamento, use enviar_link_boleto_parcela com o id correto da parcela "
-            "(priorize vencida ou a mais próxima do vencimento entre as em aberto). "
-            "Se pedir recibo ou comprovante, use enviar_recibo_parcela. "
+            "Regra obrigatória: toda resposta ao cliente no WhatsApp deve ser enviada pela ferramenta "
+            "enviar_mensagem_texto_ao_cliente. Não basta escrever texto na sua mensagem sem chamar essa ferramenta "
+            "(o cliente não recebe o que você escreve fora da tool). "
+            "Se a mensagem do cliente for só um marcador como [áudio], [imagem], [vídeo], [documento], [sticker] ou [modelo], "
+            "significa que ele enviou esse tipo de mídia (muitas vezes sem legenda): reconheça isso, responda de forma útil "
+            "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
+            "Para dados de contrato ou parcelas, use buscar_contexto_cliente antes. "
+            "Se o cliente pedir boleto, use enviar_link_boleto_parcela; se pedir recibo, use enviar_recibo_parcela. "
             "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
         )
@@ -239,13 +279,31 @@ def run_agent_turn(
 
         max_turns = 10
         last_text = ""
+        entregou_algo_ao_cliente_whatsapp = False
 
         for turn in range(max_turns):
             ai: AIMessage = llm_tools.invoke(messages)
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None) or []
+            raw_content = str(ai.content or "").strip()
+            logger.info(
+                "[agente] openai_turn correlation_id=%s turn=%s conversation_id=%s "
+                "tem_tool_calls=%s content_chars=%s content=%s",
+                cid,
+                turn,
+                conversation_id,
+                bool(calls),
+                len(raw_content),
+                _safe_log_text(raw_content, 3500) if raw_content else "(vazio)",
+            )
             if not calls:
                 last_text = str(ai.content or "")
+                logger.info(
+                    "[agente] openai_resposta_sem_tool correlation_id=%s turn=%s output=%s",
+                    cid,
+                    turn,
+                    _safe_log_text(last_text, 4000),
+                )
                 break
 
             for call in calls:
@@ -259,11 +317,18 @@ def run_agent_turn(
                     name,
                     conversation_id,
                 )
+                _log_tool_args_para_diagnostico(cid, turn, name, args)
                 fn = tool_dispatch.get(name)
                 if fn is None:
                     payload = json.dumps({"erro": f"ferramenta_desconhecida:{name}"}, ensure_ascii=False)
                 else:
                     try:
+                        if name in (
+                            "enviar_mensagem_texto_ao_cliente",
+                            "enviar_link_boleto_parcela",
+                            "enviar_recibo_parcela",
+                        ):
+                            entregou_algo_ao_cliente_whatsapp = True
                         payload = fn(**args)
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
@@ -275,6 +340,34 @@ def run_agent_turn(
                         payload = json.dumps({"erro": str(exc)}, ensure_ascii=False)
                 messages.append(ToolMessage(content=payload, tool_call_id=tid))
 
+        if not entregou_algo_ao_cliente_whatsapp:
+            msg = (last_text or "").strip()
+            if not msg:
+                msg = (
+                    "Olá! Recebemos sua mensagem. Como podemos ajudar você hoje? "
+                    "Se for sobre contrato, parcelas ou pagamentos, pode detalhar por aqui."
+                )
+            logger.info(
+                "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
+                cid,
+                conversation_id,
+                len(msg),
+            )
+            _post_tool(
+                http,
+                "/agente-atendimento/tools/enviar-texto",
+                {"conversation_id": conversation_id, "texto": msg},
+                correlation_id=cid,
+            )
+            last_text = msg
+
+        logger.info(
+            "[agente] openai_output_final correlation_id=%s conversation_id=%s chars=%s texto=%s",
+            cid,
+            conversation_id,
+            len(last_text or ""),
+            _safe_log_text(last_text or "", 8000),
+        )
         logger.info(
             "[agente] run_agent_turn_fim correlation_id=%s turnos_llm=%s conversation_id=%s",
             cid,
