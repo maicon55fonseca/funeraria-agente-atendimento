@@ -90,19 +90,22 @@ def _post_tool(
         data = {"raw": r.text[:500]}
     if r.status_code >= 400:
         logger.warning(
-            "[agente] tool_laravel_resposta_erro correlation_id=%s path=%s http_status=%s ms=%s",
+            "[agente] tool_laravel_resposta_erro correlation_id=%s path=%s http_status=%s ms=%s body_keys=%s",
             cid,
             path,
             r.status_code,
             elapsed_ms,
+            list(data.keys())[:25] if isinstance(data, dict) else None,
         )
     else:
+        body_keys = list(data.keys())[:25] if isinstance(data, dict) else None
         logger.info(
-            "[agente] tool_laravel_resposta_ok correlation_id=%s path=%s http_status=%s ms=%s",
+            "[agente] tool_laravel_resposta_ok correlation_id=%s path=%s http_status=%s ms=%s body_keys=%s",
             cid,
             path,
             r.status_code,
             elapsed_ms,
+            body_keys,
         )
     out = {"http_status": r.status_code, "body": data}
     return json.dumps(out, ensure_ascii=False)

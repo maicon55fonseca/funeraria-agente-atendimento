@@ -73,6 +73,13 @@ def processar(
         client_host,
         request.url.path,
     )
+    logger.info(
+        "[agente] processar_http_meta correlation_id=%s method=%s user_agent=%s content_length=%s",
+        cid,
+        request.method,
+        (request.headers.get("user-agent") or "")[:160],
+        request.headers.get("content-length"),
+    )
 
     try:
         _checar_token(authorization)
