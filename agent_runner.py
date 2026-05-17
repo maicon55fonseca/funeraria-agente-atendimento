@@ -212,7 +212,12 @@ def run_agent_turn(
                 "type": "function",
                 "function": {
                     "name": "enviar_mensagem_texto_ao_cliente",
-                    "description": "Envia uma mensagem de texto ao cliente no WhatsApp.",
+                    "description": (
+                        "Envia texto ao cliente no WhatsApp. "
+                        "Tom: direto e natural; na maior parte das respostas NÃO use despedidas genéricas tipo "
+                        "\"estou à disposição\", \"conte conosco\" ou \"se precisar de mais informações\" — só use encerramento cordial "
+                        "quando o cliente agradecer, disser que não precisa de mais nada ou for claro que o assunto acabou."
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -263,9 +268,10 @@ def run_agent_turn(
                 "function": {
                     "name": "finalizar_conversa_painel",
                     "description": (
-                        "Marca a conversa como FINALIZADA no painel interno (status), sem enviar WhatsApp. "
-                        "Use só depois de cumprimentar/encerrar com o cliente via enviar_mensagem_texto_ao_cliente "
-                        "(ex.: perguntou se precisa de mais algo e o atendimento esfriou) e se o contexto indica que o caso foi resolvido."
+                        "Marca a conversa como FINALIZADA só no painel (sem WhatsApp). "
+                        "Use RARAMENTE e apenas com sinal CLARO de encerramento: cliente agradeceu e encerrou, disse que não precisa de mais nada, "
+                        "ou o atendimento naturalmente findou DEPOIS de você já ter tratado tudo. "
+                        "Nunca finalize após cada resposta nem só porque você respondeu uma dúvida. Não chame esta tool em conversa ativa com perguntas em aberto."
                     ),
                     "parameters": {
                         "type": "object",
@@ -306,6 +312,13 @@ def run_agent_turn(
             "Regra obrigatória: toda resposta ao cliente no WhatsApp deve ser enviada pela ferramenta "
             "enviar_mensagem_texto_ao_cliente. Não basta escrever texto na sua mensagem sem chamar essa ferramenta "
             "(o cliente não recebe o que você escreve fora da tool). "
+            "Tom e continuidade: durante conversa ativa, responda de forma direta; mantenha o fluxo natural. "
+            "Se faltar dado, pergunte de forma objetiva em vez de encerrar. "
+            "Evite em toda resposta frases de fechamento vazias como \"estou à disposição\", \"conte conosco\", "
+            "\"qualquer coisa é só chamar\", \"se precisar de mais informações\" — isso dá sensação de robô e de conversa encerrada o tempo todo. "
+            "Use esse tipo de cordialidade SOMENTE quando houver sinais claros de encerramento: cliente agradeceu, disse que não precisa de mais nada "
+            "ou o assunto naturalmente acabou. Não finalize mentalmente o atendimento após cada mensagem sua. "
+            "Não chame finalizar_conversa_painel com frequência; só com encerramento explícito do cliente ou trato totalmente concluído e cliente satisfeito. "
             "Se a mensagem do cliente for só um marcador como [áudio], [imagem], [vídeo], [documento], [sticker] ou [modelo], "
             "significa que ele enviou esse tipo de mídia (muitas vezes sem legenda): reconheça isso, responda de forma útil "
             "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
@@ -317,8 +330,6 @@ def run_agent_turn(
             "Ao retomar, leia mensagens_recentes e não desfaça o que o humano acordou com o cliente. "
             "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
-            "Encerramento: quando o pedido estiver resolvido, pergunte de forma breve se precisa de mais algo; se o cliente indicar que não ou agradecer e encerrar, "
-            "pode usar finalizar_conversa_painel após sua última mensagem ao cliente (essa tool só muda o status no painel). "
             "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
         )
@@ -395,8 +406,8 @@ def run_agent_turn(
             msg = (last_text or "").strip()
             if not msg:
                 msg = (
-                    "Olá! Recebemos sua mensagem. Como podemos ajudar você hoje? "
-                    "Se for sobre contrato, parcelas ou pagamentos, pode detalhar por aqui."
+                    "Recebi sua mensagem. O que você precisa — contrato, parcela, boleto ou outra dúvida? "
+                    "Se puder, responda em uma frase."
                 )
             logger.info(
                 "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
