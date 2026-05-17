@@ -343,7 +343,9 @@ def run_agent_turn(
             "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
             "Para próxima parcela a vencer (data e valor), siga estritamente instrucao_proxima_parcela_vencimento e proxima_parcela_em_aberto; não infira só com dia_vencimento do contrato. "
-            "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
+            "Não invente valores ou links; use apenas o retorno das ferramentas. "
+            "Em cada passagem de ferramentas: no máximo UMA chamada a enviar_mensagem_texto_ao_cliente (uma bolha por vez); "
+            "não envie duas saudações ou duas perguntas seguidas na mesma rodada.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
         )
 
@@ -381,6 +383,7 @@ def run_agent_turn(
                 )
                 break
 
+            texto_whatsapp_ja_enviado_neste_batch = False
             for call in calls:
                 name = str(call.get("name", ""))
                 args = dict(call.get("args") or {})
@@ -393,6 +396,24 @@ def run_agent_turn(
                     conversation_id,
                 )
                 _log_tool_args_para_diagnostico(cid, turn, name, args)
+                if name == "enviar_mensagem_texto_ao_cliente" and texto_whatsapp_ja_enviado_neste_batch:
+                    logger.warning(
+                        "[agente] enviar_texto_duplicado_na_mesma_rodada correlation_id=%s turn=%s conversation_id=%s tool_call_id=%s",
+                        cid,
+                        turn,
+                        conversation_id,
+                        tid,
+                    )
+                    payload = json.dumps(
+                        {
+                            "ok": True,
+                            "skipped_duplicate": True,
+                            "message": "Mensagem ao cliente já enviada nesta rodada; não chame esta ferramenta duas vezes.",
+                        },
+                        ensure_ascii=False,
+                    )
+                    messages.append(ToolMessage(content=payload, tool_call_id=tid))
+                    continue
                 fn = tool_dispatch.get(name)
                 if fn is None:
                     payload = json.dumps({"erro": f"ferramenta_desconhecida:{name}"}, ensure_ascii=False)
@@ -405,6 +426,8 @@ def run_agent_turn(
                         ):
                             entregou_algo_ao_cliente_whatsapp = True
                         payload = fn(**args)
+                        if name == "enviar_mensagem_texto_ao_cliente":
+                            texto_whatsapp_ja_enviado_neste_batch = True
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "[agente] llm_tool_exec_erro correlation_id=%s tool=%s erro=%s",
