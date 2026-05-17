@@ -316,6 +316,7 @@ def run_agent_turn(
             "Mensagem do cliente não encerra essa pausa — você só é chamado de novo quando já passou o silêncio humano exigido. "
             "Ao retomar, leia mensagens_recentes e não desfaça o que o humano acordou com o cliente. "
             "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
+            "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
             "Encerramento: quando o pedido estiver resolvido, pergunte de forma breve se precisa de mais algo; se o cliente indicar que não ou agradecer e encerrar, "
             "pode usar finalizar_conversa_painel após sua última mensagem ao cliente (essa tool só muda o status no painel). "
             "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
