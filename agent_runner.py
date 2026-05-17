@@ -192,7 +192,10 @@ def run_agent_turn(
                 "function": {
                     "name": "buscar_contexto_cliente",
                     "description": (
-                        "Carrega dados do cliente, parcelas, histórico recente de mensagens e regras de intervenção humana. "
+                        "Carrega dados do cliente, parcelas, histórico recente de mensagens, regras de intervenção humana e o objeto "
+                        "data.saudacao (horário America/Sao_Paulo, periodo_dia, conversa_ja_tem_historico, nome_primeiro, "
+                        "modelo_com_nome, modelo_sem_nome_primeiro_contato, exemplo_saudacao_continuidade, instrucao_saudacao). "
+                        "Para cumprimentos (oi, olá, bom dia etc.), siga data.saudacao e instrucao_saudacao. "
                         "Sempre chame primeiro em novas interações."
                     ),
                     "parameters": {
@@ -216,7 +219,8 @@ def run_agent_turn(
                         "Envia texto ao cliente no WhatsApp. "
                         "Tom: direto e natural; na maior parte das respostas NÃO use despedidas genéricas tipo "
                         "\"estou à disposição\", \"conte conosco\" ou \"se precisar de mais informações\" — só use encerramento cordial "
-                        "quando o cliente agradecer, disser que não precisa de mais nada ou for claro que o assunto acabou."
+                        "quando o cliente agradecer, disser que não precisa de mais nada ou for claro que o assunto acabou. "
+                        "Se a mensagem for saudação ou retomada leve, alinhe ao objeto data.saudacao retornado por buscar_contexto_cliente."
                     ),
                     "parameters": {
                         "type": "object",
@@ -323,7 +327,14 @@ def run_agent_turn(
             "significa que ele enviou esse tipo de mídia (muitas vezes sem legenda): reconheça isso, responda de forma útil "
             "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
             "Para dados de contrato, parcelas ou histórico da conversa, use buscar_contexto_cliente (lá vêm mensagens_recentes, "
-            "regras de pausa pós-atendente humano e status). "
+            "regras de pausa pós-atendente humano, status e o objeto data.saudacao). "
+            "Saudação e continuidade: após buscar_contexto_cliente, leia body.data.saudacao (se o retorno vier em envelope HTTP, use body.data). "
+            "Se conversa_ja_tem_historico for true, o atendimento já começou — cumprimento é continuação, com tom de quem já conhece o cliente. "
+            "Nunca use 'Seja bem-vindo(a)', 'bem-vindo à empresa' nem reinicie como primeiro contato. "
+            "Com nome_primeiro preenchido, use modelo_com_nome trocando {nome} por esse valor (ou use exemplo_saudacao_continuidade se vier preenchido, que já está pronto). "
+            "Com historico mas sem nome, cumprimento curto conforme periodo_dia em instrucao_saudacao, sem tom de boas-vindas institucional. "
+            "Só com conversa_ja_tem_historico false use modelo_sem_nome_primeiro_contato ou equivalente para primeiro contato neste chat. "
+            "Horário e manhã/tarde/noite vêm de saudacao (timezone e hora_local); não contradiga o periodo_dia. "
             "Intervenção humana: se um atendente enviou mensagem pelo painel, a IA fica pausada por um período indicado em "
             "intervencao_humana_minutos_inatividade; cada nova mensagem humana recomeça esse prazo. "
             "Mensagem do cliente não encerra essa pausa — você só é chamado de novo quando já passou o silêncio humano exigido. "
