@@ -195,6 +195,7 @@ def run_agent_turn(
                         "Carrega dados do cliente, parcelas, histórico recente de mensagens, regras de intervenção humana e o objeto "
                         "data.saudacao (horário America/Sao_Paulo, periodo_dia, conversa_ja_tem_historico, nome_primeiro, "
                         "modelo_com_nome, modelo_sem_nome_primeiro_contato, exemplo_saudacao_continuidade, instrucao_saudacao). "
+                        "Também instrucao_proxima_parcela_vencimento e contratos_ativos[].proxima_parcela_em_aberto para data/valor da próxima parcela. "
                         "Para cumprimentos (oi, olá, bom dia etc.), siga data.saudacao e instrucao_saudacao. "
                         "Sempre chame primeiro em novas interações."
                     ),
@@ -341,6 +342,7 @@ def run_agent_turn(
             "Ao retomar, leia mensagens_recentes e não desfaça o que o humano acordou com o cliente. "
             "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
+            "Para próxima parcela a vencer (data e valor), siga estritamente instrucao_proxima_parcela_vencimento e proxima_parcela_em_aberto; não infira só com dia_vencimento do contrato. "
             "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
         )
