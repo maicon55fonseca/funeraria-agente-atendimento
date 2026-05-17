@@ -175,13 +175,24 @@ def run_agent_turn(
                 correlation_id=cid,
             )
 
+        def tool_finalizar_conversa(motivo: str | None = None) -> str:
+            body: dict[str, Any] = {"conversation_id": conversation_id}
+            if motivo is not None and str(motivo).strip() != "":
+                body["motivo"] = str(motivo).strip()[:500]
+            return _post_tool(
+                http,
+                "/agente-atendimento/tools/finalizar-conversa",
+                body,
+                correlation_id=cid,
+            )
+
         tools = [
             {
                 "type": "function",
                 "function": {
                     "name": "buscar_contexto_cliente",
                     "description": (
-                        "Carrega dados do cliente, parcelas e instruções configuradas no painel. "
+                        "Carrega dados do cliente, parcelas, histórico recente de mensagens e regras de intervenção humana. "
                         "Sempre chame primeiro em novas interações."
                     ),
                     "parameters": {
@@ -247,6 +258,28 @@ def run_agent_turn(
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "finalizar_conversa_painel",
+                    "description": (
+                        "Marca a conversa como FINALIZADA no painel interno (status), sem enviar WhatsApp. "
+                        "Use só depois de cumprimentar/encerrar com o cliente via enviar_mensagem_texto_ao_cliente "
+                        "(ex.: perguntou se precisa de mais algo e o atendimento esfriou) e se o contexto indica que o caso foi resolvido."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "motivo": {
+                                "type": "string",
+                                "description": "Opcional. Resumo interno do motivo do encerramento.",
+                            },
+                        },
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                },
+            },
         ]
 
         tool_dispatch: dict[str, Callable[..., str]] = {
@@ -255,6 +288,9 @@ def run_agent_turn(
             "enviar_link_boleto_parcela": lambda parcela_id, **_: tool_enviar_boleto(int(parcela_id)),
             "enviar_recibo_parcela": lambda parcela_id=None, **_: tool_enviar_recibo(
                 int(parcela_id) if parcela_id is not None else None
+            ),
+            "finalizar_conversa_painel": lambda motivo=None, **_: tool_finalizar_conversa(
+                str(motivo).strip() if motivo is not None and str(motivo).strip() != "" else None
             ),
         }
 
@@ -273,8 +309,15 @@ def run_agent_turn(
             "Se a mensagem do cliente for só um marcador como [áudio], [imagem], [vídeo], [documento], [sticker] ou [modelo], "
             "significa que ele enviou esse tipo de mídia (muitas vezes sem legenda): reconheça isso, responda de forma útil "
             "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
-            "Para dados de contrato ou parcelas, use buscar_contexto_cliente antes. "
+            "Para dados de contrato, parcelas ou histórico da conversa, use buscar_contexto_cliente (lá vêm mensagens_recentes, "
+            "regras de pausa pós-atendente humano e status). "
+            "Intervenção humana: se um atendente enviou mensagem pelo painel, a IA fica pausada por um período indicado em "
+            "intervencao_humana_minutos_inatividade; cada nova mensagem humana recomeça esse prazo. "
+            "Mensagem do cliente não encerra essa pausa — você só é chamado de novo quando já passou o silêncio humano exigido. "
+            "Ao retomar, leia mensagens_recentes e não desfaça o que o humano acordou com o cliente. "
             "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
+            "Encerramento: quando o pedido estiver resolvido, pergunte de forma breve se precisa de mais algo; se o cliente indicar que não ou agradecer e encerrar, "
+            "pode usar finalizar_conversa_painel após sua última mensagem ao cliente (essa tool só muda o status no painel). "
             "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
         )
