@@ -216,7 +216,11 @@ def run_agent_turn(
                 "type": "function",
                 "function": {
                     "name": "enviar_link_boleto_parcela",
-                    "description": "Envia o link de boleto para pagamento da parcela.",
+                    "description": (
+                        "Envia ao cliente os dados de pagamento da parcela: link do boleto (se houver), "
+                        "linha digitável, código de barras e PIX copia e cola quando disponíveis na integração (Progem v2 / Asaas). "
+                        "Use após buscar_contexto_cliente e quando o cliente pedir boleto, linha, código de barras ou PIX."
+                    ),
                     "parameters": {
                         "type": "object",
                         "properties": {"parcela_id": {"type": "integer"}},
@@ -270,7 +274,7 @@ def run_agent_turn(
             "significa que ele enviou esse tipo de mídia (muitas vezes sem legenda): reconheça isso, responda de forma útil "
             "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
             "Para dados de contrato ou parcelas, use buscar_contexto_cliente antes. "
-            "Se o cliente pedir boleto, use enviar_link_boleto_parcela; se pedir recibo, use enviar_recibo_parcela. "
+            "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
             "Não invente valores ou links; use apenas o retorno das ferramentas.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
         )
