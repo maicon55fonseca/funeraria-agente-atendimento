@@ -347,6 +347,8 @@ def run_agent_turn(
             "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
             "Para próxima parcela a vencer (data e valor), siga estritamente instrucao_proxima_parcela_vencimento e proxima_parcela_em_aberto; não infira só com dia_vencimento do contrato. "
+            "Se o cliente perguntar de onde vieram plano, valores ou datas (ex.: 'de onde você pegou', 'confirma aí'), siga instrucao_proveniencia_dados: cite contratos_ativos[].id, numero_contrato e plano_nome do JSON; "
+            "não responda com frase genérica que não explica a origem. Se instrucao_multiplos_contratos_ativos vier preenchida, há mais de um contrato ativo — não misture dados entre eles. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
             "Em cada passagem de ferramentas: no máximo UMA chamada a enviar_mensagem_texto_ao_cliente (uma bolha por vez); "
             "não envie duas saudações ou duas perguntas seguidas na mesma rodada.\n\n"
