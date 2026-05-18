@@ -111,6 +111,49 @@ def _post_tool(
     return json.dumps(out, ensure_ascii=False)
 
 
+TOOLS_ENTREGA_AO_CLIENTE = frozenset(
+    {
+        "enviar_mensagem_texto_ao_cliente",
+        "enviar_link_boleto_parcela",
+        "enviar_recibo_parcela",
+    }
+)
+
+
+def _tool_resposta_foi_sucesso(payload: str) -> bool:
+    """True se HTTP ok e body não indica falha explícita (ok:false)."""
+    try:
+        envio = json.loads(payload)
+    except Exception:
+        return False
+    st = envio.get("http_status")
+    if not isinstance(st, int) or st >= 400:
+        return False
+    body = envio.get("body")
+    if not isinstance(body, dict):
+        return True
+    if body.get("ok") is False:
+        return False
+    return True
+
+
+def _ordenar_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Garante contexto antes de envio ao cliente; finalizar por último (se vier no lote)."""
+    prioridade = {
+        "buscar_contexto_cliente": 0,
+        "enviar_mensagem_texto_ao_cliente": 10,
+        "enviar_link_boleto_parcela": 11,
+        "enviar_recibo_parcela": 12,
+        "finalizar_conversa_painel": 90,
+    }
+
+    def _chave(c: dict[str, Any]) -> tuple[int, str]:
+        nome = str(c.get("name", ""))
+        return (prioridade.get(nome, 50), str(c.get("id") or ""))
+
+    return sorted(calls, key=_chave)
+
+
 def run_agent_turn(
     *,
     laravel_api_base: str,
@@ -316,9 +359,15 @@ def run_agent_turn(
         system = (
             "Você é o assistente virtual de atendimento no WhatsApp. "
             "Seja cordial, objetivo e em português do Brasil. "
+            "FLUXO OBRIGATÓRIO (uma interação = uma resposta ao cliente): "
+            "(1) buscar_contexto_cliente quando precisar de dados do cadastro — no máximo uma vez; "
+            "(2) enviar_mensagem_texto_ao_cliente UMA vez com a resposta completa; "
+            "(3) PARAR — não chame mais ferramentas, não envie segunda mensagem, não finalize a conversa no painel. "
+            "Proibido: buscar → responder → buscar de novo → responder de novo → finalizar. "
             "Regra obrigatória: toda resposta ao cliente no WhatsApp deve ser enviada pela ferramenta "
             "enviar_mensagem_texto_ao_cliente. Não basta escrever texto na sua mensagem sem chamar essa ferramenta "
             "(o cliente não recebe o que você escreve fora da tool). "
+            "Não chame finalizar_conversa_painel após responder ao cliente; só em encerramento explícito raro (na prática evite). "
             "Tom e continuidade: durante conversa ativa, responda de forma direta; mantenha o fluxo natural. "
             "Se faltar dado, pergunte de forma objetiva em vez de encerrar. "
             "PROIBIDO encerrar praticamente toda mensagem com blocos de oferta genérica como \"Se precisar de mais informações\", "
@@ -370,11 +419,35 @@ def run_agent_turn(
             HumanMessage(content=user_message),
         ]
 
-        max_turns = 10
+        max_turns = 4
         last_text = ""
         entregou_algo_ao_cliente_whatsapp = False
+        contexto_obtido_no_turno: int | None = None
 
         for turn in range(max_turns):
+            if entregou_algo_ao_cliente_whatsapp:
+                logger.info(
+                    "[agente] parada_entrega_ja_realizada correlation_id=%s conversation_id=%s turn=%s",
+                    cid,
+                    conversation_id,
+                    turn,
+                )
+                break
+
+            if (
+                contexto_obtido_no_turno is not None
+                and turn > contexto_obtido_no_turno + 1
+            ):
+                logger.info(
+                    "[agente] parada_max_uma_rodada_apos_contexto correlation_id=%s conversation_id=%s "
+                    "contexto_turn=%s turn_atual=%s",
+                    cid,
+                    conversation_id,
+                    contexto_obtido_no_turno,
+                    turn,
+                )
+                break
+
             ai: AIMessage = llm_tools.invoke(messages)
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None) or []
@@ -400,7 +473,7 @@ def run_agent_turn(
                 break
 
             texto_whatsapp_ja_enviado_neste_batch = False
-            for call in calls:
+            for call in _ordenar_tool_calls(list(calls)):
                 name = str(call.get("name", ""))
                 args = dict(call.get("args") or {})
                 tid = str(call.get("id") or f"call_{turn}_{name}")
@@ -412,6 +485,49 @@ def run_agent_turn(
                     conversation_id,
                 )
                 _log_tool_args_para_diagnostico(cid, turn, name, args)
+
+                if name == "finalizar_conversa_painel" and (
+                    entregou_algo_ao_cliente_whatsapp or texto_whatsapp_ja_enviado_neste_batch
+                ):
+                    logger.info(
+                        "[agente] finalizar_conversa_ignorado_apos_resposta correlation_id=%s turn=%s conversation_id=%s",
+                        cid,
+                        turn,
+                        conversation_id,
+                    )
+                    payload = json.dumps(
+                        {
+                            "ok": True,
+                            "skipped": True,
+                            "message": (
+                                "Finalização no painel não permitida na mesma interação em que você já "
+                                "respondeu ao cliente. A conversa permanece aberta."
+                            ),
+                        },
+                        ensure_ascii=False,
+                    )
+                    messages.append(ToolMessage(content=payload, tool_call_id=tid))
+                    continue
+
+                if name in TOOLS_ENTREGA_AO_CLIENTE and entregou_algo_ao_cliente_whatsapp:
+                    logger.warning(
+                        "[agente] entrega_duplicada_ignorada correlation_id=%s turn=%s tool=%s conversation_id=%s",
+                        cid,
+                        turn,
+                        name,
+                        conversation_id,
+                    )
+                    payload = json.dumps(
+                        {
+                            "ok": True,
+                            "skipped_duplicate": True,
+                            "message": "Já houve entrega ao cliente nesta interação; não envie outra mensagem.",
+                        },
+                        ensure_ascii=False,
+                    )
+                    messages.append(ToolMessage(content=payload, tool_call_id=tid))
+                    continue
+
                 if name == "enviar_mensagem_texto_ao_cliente" and texto_whatsapp_ja_enviado_neste_batch:
                     logger.warning(
                         "[agente] enviar_texto_duplicado_na_mesma_rodada correlation_id=%s turn=%s conversation_id=%s tool_call_id=%s",
@@ -435,22 +551,14 @@ def run_agent_turn(
                     payload = json.dumps({"erro": f"ferramenta_desconhecida:{name}"}, ensure_ascii=False)
                 else:
                     try:
-                        if name in (
-                            "enviar_mensagem_texto_ao_cliente",
-                            "enviar_link_boleto_parcela",
-                            "enviar_recibo_parcela",
-                        ):
-                            entregou_algo_ao_cliente_whatsapp = True
                         payload = fn(**args)
-                        if name == "enviar_mensagem_texto_ao_cliente":
-                            try:
-                                envio = json.loads(payload)
-                                st = envio.get("http_status")
-                                if isinstance(st, int) and st < 400:
-                                    texto_whatsapp_ja_enviado_neste_batch = True
-                                    last_text = str(args.get("texto") or "")
-                            except Exception:
-                                pass
+                        if name == "buscar_contexto_cliente" and _tool_resposta_foi_sucesso(payload):
+                            contexto_obtido_no_turno = turn
+                        if name in TOOLS_ENTREGA_AO_CLIENTE and _tool_resposta_foi_sucesso(payload):
+                            entregou_algo_ao_cliente_whatsapp = True
+                            if name == "enviar_mensagem_texto_ao_cliente":
+                                texto_whatsapp_ja_enviado_neste_batch = True
+                                last_text = str(args.get("texto") or "")
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "[agente] llm_tool_exec_erro correlation_id=%s tool=%s erro=%s",
@@ -461,10 +569,10 @@ def run_agent_turn(
                         payload = json.dumps({"erro": str(exc)}, ensure_ascii=False)
                 messages.append(ToolMessage(content=payload, tool_call_id=tid))
 
-            if texto_whatsapp_ja_enviado_neste_batch:
+            if entregou_algo_ao_cliente_whatsapp:
                 logger.info(
-                    "[agente] parada_apos_enviar_texto_correlation_id=%s turn=%s conversation_id=%s "
-                    "(sem nova invocação do modelo)",
+                    "[agente] parada_apos_entrega_cliente correlation_id=%s turn=%s conversation_id=%s "
+                    "(fluxo: contexto → resposta → parar; sem nova invocação do modelo)",
                     cid,
                     turn,
                     conversation_id,
