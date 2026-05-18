@@ -355,6 +355,8 @@ def run_agent_turn(
             "Se o cliente perguntar de onde vieram plano, valores ou datas (ex.: 'de onde você pegou', 'confirma aí'), siga instrucao_proveniencia_dados: cite contratos_ativos[].id, numero_contrato e plano_nome do JSON; "
             "não responda com frase genérica que não explica a origem. Se instrucao_multiplos_contratos_ativos vier preenchida, há mais de um contrato ativo — não misture dados entre eles. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
+            "Após chamar enviar_mensagem_texto_ao_cliente com sucesso nesta rodada, não produza mensagem adicional ao usuário: "
+            "não gere novo raciocínio nem nova bolha — a ferramenta já enviou a resposta. "
             "Em cada passagem de ferramentas: no máximo UMA chamada a enviar_mensagem_texto_ao_cliente (uma bolha por vez); "
             "não envie duas saudações ou duas perguntas seguidas na mesma rodada.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
@@ -438,7 +440,14 @@ def run_agent_turn(
                             entregou_algo_ao_cliente_whatsapp = True
                         payload = fn(**args)
                         if name == "enviar_mensagem_texto_ao_cliente":
-                            texto_whatsapp_ja_enviado_neste_batch = True
+                            try:
+                                envio = json.loads(payload)
+                                st = envio.get("http_status")
+                                if isinstance(st, int) and st < 400:
+                                    texto_whatsapp_ja_enviado_neste_batch = True
+                                    last_text = str(args.get("texto") or "")
+                            except Exception:
+                                pass
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "[agente] llm_tool_exec_erro correlation_id=%s tool=%s erro=%s",
@@ -448,6 +457,16 @@ def run_agent_turn(
                         )
                         payload = json.dumps({"erro": str(exc)}, ensure_ascii=False)
                 messages.append(ToolMessage(content=payload, tool_call_id=tid))
+
+            if texto_whatsapp_ja_enviado_neste_batch:
+                logger.info(
+                    "[agente] parada_apos_enviar_texto_correlation_id=%s turn=%s conversation_id=%s "
+                    "(sem nova invocação do modelo)",
+                    cid,
+                    turn,
+                    conversation_id,
+                )
+                break
 
         if not entregou_algo_ao_cliente_whatsapp:
             msg = (last_text or "").strip()
