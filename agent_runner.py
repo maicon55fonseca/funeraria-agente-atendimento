@@ -350,6 +350,8 @@ def run_agent_turn(
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
             "Para próxima parcela a vencer (data e valor), siga estritamente instrucao_proxima_parcela_vencimento e proxima_parcela_em_aberto; não infira só com dia_vencimento do contrato. "
             "Para dizer se há parcelas em aberto, atraso ou se o cliente 'está em dia', siga instrucao_parcelas_aberto_atraso e os números em financeiro_resumo (parcelas_em_aberto, parcelas_em_atraso); não contradiga esses contadores. "
+            "Se data.instrucao_cadastro_sem_contrato_ativo_listado vier preenchida ou cadastro_financeiro_sem_contrato_ativo_listado for true, siga essa instrução: mencione contrato suspenso se qtd_contratos_suspenso_no_cadastro > 0; não diga que 'não há contrato' de forma absoluta. "
+            "Se o cliente pedir para falar com o financeiro, confirme de forma breve e evite repetir o mesmo bloco inteiro sobre 'sem contrato ativo' das mensagens anteriores. "
             "Se o cliente perguntar de onde vieram plano, valores ou datas (ex.: 'de onde você pegou', 'confirma aí'), siga instrucao_proveniencia_dados: cite contratos_ativos[].id, numero_contrato e plano_nome do JSON; "
             "não responda com frase genérica que não explica a origem. Se instrucao_multiplos_contratos_ativos vier preenchida, há mais de um contrato ativo — não misture dados entre eles. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
