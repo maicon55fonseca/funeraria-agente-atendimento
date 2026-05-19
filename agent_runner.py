@@ -199,11 +199,26 @@ def run_agent_turn(
                 correlation_id=cid,
             )
 
-        def tool_enviar_boleto(parcela_id: int) -> str:
+        def tool_enviar_boleto(
+            parcela_id: int | None = None,
+            parcela_ids: list | None = None,
+            **_: Any,
+        ) -> str:
+            body: dict[str, Any] = {"conversation_id": conversation_id}
+            ids_list = parcela_ids if isinstance(parcela_ids, list) else None
+            if ids_list:
+                body["parcela_ids"] = [int(x) for x in ids_list]
+            elif parcela_id is not None:
+                body["parcela_id"] = int(parcela_id)
+            else:
+                return json.dumps(
+                    {"erro": "Informe parcela_id (uma parcela) ou parcela_ids (várias)."},
+                    ensure_ascii=False,
+                )
             return _post_tool(
                 http,
                 "/agente-atendimento/tools/enviar-boleto",
-                {"conversation_id": conversation_id, "parcela_id": int(parcela_id)},
+                body,
                 correlation_id=cid,
             )
 
@@ -240,7 +255,8 @@ def run_agent_turn(
                         "modelo_com_nome, modelo_sem_nome_primeiro_contato, exemplo_saudacao_continuidade, instrucao_saudacao). "
                         "Também instrucao_proxima_parcela_vencimento, instrucao_como_chamar_o_cliente, instrucao_mensagens_agrupadas_debounce (várias frases do cliente podem vir num texto só), "
                         "contratos_cancelados (planos cancelados: numero_contrato, plano_nome, data_cancelamento), "
-                        "qtd_contratos_cancelados_no_cadastro, instrucao_contratos_cancelados e contratos_ativos[].proxima_parcela_em_aberto para data/valor da próxima parcela. "
+                        "qtd_contratos_cancelados_no_cadastro, instrucao_contratos_cancelados, parcelas_em_aberto_lista (parcela_id por mensalidade), "
+                        "instrucao_boleto_pix_por_parcela e contratos_ativos[].proxima_parcela_em_aberto para data/valor da próxima parcela. "
                         "Para cumprimentos (oi, olá, bom dia etc.), siga data.saudacao e instrucao_saudacao. "
                         "Sempre chame primeiro em novas interações."
                     ),
@@ -284,14 +300,25 @@ def run_agent_turn(
                 "function": {
                     "name": "enviar_link_boleto_parcela",
                     "description": (
-                        "Envia ao cliente os dados de pagamento da parcela: link do boleto (se houver), "
-                        "linha digitável, código de barras e PIX copia e cola quando disponíveis na integração (Progem v2 / Asaas). "
-                        "Use após buscar_contexto_cliente e quando o cliente pedir boleto, linha, código de barras ou PIX."
+                        "Envia cobrança ao cliente: uma mensalidade = um boleto com link, linha digitável e PIX próprios. "
+                        "Não invente PIX único para somar várias parcelas. "
+                        "parcela_id: uma parcela. parcela_ids: até 8 parcelas (parcelas_em_aberto_lista) — uma seção por mensalidade. "
+                        "Após chamar esta ferramenta NÃO use enviar_mensagem_texto_ao_cliente para repetir ou confirmar o envio."
                     ),
                     "parameters": {
                         "type": "object",
-                        "properties": {"parcela_id": {"type": "integer"}},
-                        "required": ["parcela_id"],
+                        "properties": {
+                            "parcela_id": {
+                                "type": "integer",
+                                "description": "ID de uma parcela em aberto (parcelas_em_aberto_lista[].parcela_id).",
+                            },
+                            "parcela_ids": {
+                                "type": "array",
+                                "items": {"type": "integer"},
+                                "description": "Várias parcelas em aberto — cada uma com boleto/PIX separado (máx. 8).",
+                            },
+                        },
+                        "required": [],
                         "additionalProperties": False,
                     },
                 },
@@ -342,7 +369,9 @@ def run_agent_turn(
         tool_dispatch: dict[str, Callable[..., str]] = {
             "buscar_contexto_cliente": lambda **_: tool_contexto(),
             "enviar_mensagem_texto_ao_cliente": lambda texto, **_: tool_enviar_texto(str(texto)),
-            "enviar_link_boleto_parcela": lambda parcela_id, **_: tool_enviar_boleto(int(parcela_id)),
+            "enviar_link_boleto_parcela": lambda parcela_id=None, parcela_ids=None, **kw: tool_enviar_boleto(
+                parcela_id, parcela_ids, **kw
+            ),
             "enviar_recibo_parcela": lambda parcela_id=None, **_: tool_enviar_recibo(
                 int(parcela_id) if parcela_id is not None else None
             ),
@@ -399,7 +428,9 @@ def run_agent_turn(
             "intervencao_humana_minutos_inatividade; cada nova mensagem humana recomeça esse prazo. "
             "Mensagem do cliente não encerra essa pausa — você só é chamado de novo quando já passou o silêncio humano exigido. "
             "Ao retomar, leia mensagens_recentes e não desfaça o que o humano acordou com o cliente. "
-            "Se o cliente pedir boleto, linha digitável, código de barras ou PIX, use enviar_link_boleto_parcela (a ferramenta envia tudo o que estiver disponível). "
+            "Se o cliente pedir boleto, linha digitável, código de barras ou PIX: use enviar_link_boleto_parcela com parcela_id ou parcela_ids "
+            "(cada mensalidade tem cobrança própria — veja parcelas_em_aberto_lista e instrucao_boleto_pix_por_parcela). "
+            "Não envie texto depois confirmando o boleto/PIX — a ferramenta já manda os dados. Não invente um PIX para o total de várias parcelas. "
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
             "Para próxima parcela a vencer (data e valor), siga estritamente instrucao_proxima_parcela_vencimento e proxima_parcela_em_aberto; não infira só com dia_vencimento do contrato. "
             "Para dizer se há parcelas em aberto, atraso ou se o cliente 'está em dia', siga instrucao_parcelas_aberto_atraso e os números em financeiro_resumo (parcelas_em_aberto, parcelas_em_atraso); não contradiga esses contadores. "
@@ -476,6 +507,7 @@ def run_agent_turn(
                 break
 
             texto_whatsapp_ja_enviado_neste_batch = False
+            cobranca_enviada_neste_batch = False
             for call in _ordenar_tool_calls(list(calls)):
                 name = str(call.get("name", ""))
                 args = dict(call.get("args") or {})
@@ -531,6 +563,27 @@ def run_agent_turn(
                     messages.append(ToolMessage(content=payload, tool_call_id=tid))
                     continue
 
+                if name == "enviar_mensagem_texto_ao_cliente" and cobranca_enviada_neste_batch:
+                    logger.info(
+                        "[agente] enviar_texto_ignorado_apos_cobranca correlation_id=%s turn=%s conversation_id=%s",
+                        cid,
+                        turn,
+                        conversation_id,
+                    )
+                    payload = json.dumps(
+                        {
+                            "ok": True,
+                            "skipped": True,
+                            "message": (
+                                "Dados de boleto/PIX já foram enviados nesta interação. "
+                                "Não envie mensagem de texto repetindo ou confirmando o envio."
+                            ),
+                        },
+                        ensure_ascii=False,
+                    )
+                    messages.append(ToolMessage(content=payload, tool_call_id=tid))
+                    continue
+
                 if name == "enviar_mensagem_texto_ao_cliente" and texto_whatsapp_ja_enviado_neste_batch:
                     logger.warning(
                         "[agente] enviar_texto_duplicado_na_mesma_rodada correlation_id=%s turn=%s conversation_id=%s tool_call_id=%s",
@@ -559,6 +612,8 @@ def run_agent_turn(
                             contexto_obtido_no_turno = turn
                         if name in TOOLS_ENTREGA_AO_CLIENTE and _tool_resposta_foi_sucesso(payload):
                             entregou_algo_ao_cliente_whatsapp = True
+                            if name == "enviar_link_boleto_parcela":
+                                cobranca_enviada_neste_batch = True
                             if name == "enviar_mensagem_texto_ao_cliente":
                                 texto_whatsapp_ja_enviado_neste_batch = True
                                 last_text = str(args.get("texto") or "")
