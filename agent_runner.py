@@ -300,10 +300,9 @@ def run_agent_turn(
                 "function": {
                     "name": "enviar_link_boleto_parcela",
                     "description": (
-                        "Envia cobrança ao cliente: uma mensalidade = um boleto com link, linha digitável e PIX próprios. "
-                        "Não invente PIX único para somar várias parcelas. "
-                        "parcela_id: uma parcela. parcela_ids: até 8 parcelas (parcelas_em_aberto_lista) — uma seção por mensalidade. "
-                        "Após chamar esta ferramenta NÃO use enviar_mensagem_texto_ao_cliente para repetir ou confirmar o envio."
+                        "Envia cobrança ao cliente em mensagens separadas no WhatsApp (cabeçalho/link; aviso + só código de barras; "
+                        "aviso + só PIX) para facilitar copiar. Uma mensalidade = um boleto/PIX próprios — não invente PIX único para várias parcelas. "
+                        "parcela_id ou parcela_ids (até 8). Não repita códigos em enviar_mensagem_texto_ao_cliente depois."
                     ),
                     "parameters": {
                         "type": "object",
