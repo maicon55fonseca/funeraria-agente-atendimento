@@ -166,6 +166,7 @@ def run_agent_turn(
     openai_model: str | None = None,
     openai_base_url: str | None = None,
     correlation_id: str | None = None,
+    deve_usar_instrucoes_audio: bool = False,
 ) -> dict[str, Any]:
     cid = (correlation_id or "").strip() or "-"
     base = laravel_api_base.rstrip("/")
@@ -268,6 +269,9 @@ def run_agent_turn(
                         "Carrega dados do cliente, parcelas, histórico recente de mensagens, regras de intervenção humana e o objeto "
                         "data.saudacao (horário America/Sao_Paulo, periodo_dia, conversa_ja_tem_historico, evitar_repetir_saudacao_ciclo_completo, nome_primeiro, "
                         "modelo_com_nome, modelo_sem_nome_primeiro_contato, exemplo_saudacao_continuidade, instrucao_saudacao). "
+                        "Campos deve_usar_instrucoes_audio_agora, instrucoes_atendimento_audio e conversa_em_modo_audio: "
+                        "quando deve_usar_instrucoes_audio_agora for true, siga instrucoes_atendimento_audio para TODO o conteúdo "
+                        "(dependentes, filhos, casamento, inclusões no plano, tom falado) — prioridade sobre instrucoes_atendimento_geral. "
                         "Também instrucao_proxima_parcela_vencimento, instrucao_como_chamar_o_cliente, instrucao_mensagens_agrupadas_debounce (várias frases do cliente podem vir num texto só), "
                         "contratos_cancelados (planos cancelados: numero_contrato, plano_nome, data_cancelamento), "
                         "qtd_contratos_cancelados_no_cadastro, instrucao_contratos_cancelados, parcelas_em_aberto_lista (parcela_id por mensalidade), "
@@ -491,12 +495,21 @@ def run_agent_turn(
             "Se enviar_link_boleto_parcela falhar (parcela não vinculada, sem cobrança, etc.), o sistema já avisa a equipe no WhatsApp — "
             "informe o cliente com cordialidade e NÃO invente boleto. Para outras dúvidas sem resposta, use avisar_equipe_escalonamento "
             "antes ou junto de enviar_mensagem_texto_ao_cliente. "
+            "Modo áudio: se buscar_contexto_cliente retornar deve_usar_instrucoes_audio_agora=true, "
+            "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
             "Após chamar enviar_mensagem_texto_ao_cliente com sucesso nesta rodada, não produza mensagem adicional ao usuário: "
             "não gere novo raciocínio nem nova bolha — a ferramenta já enviou a resposta. "
             "Em cada passagem de ferramentas: no máximo UMA chamada a enviar_mensagem_texto_ao_cliente (uma bolha por vez); "
             "não envie duas saudações ou duas perguntas seguidas na mesma rodada.\n\n"
             f"Instruções adicionais da empresa:\n{extra_system_instructions or '(nenhuma)'}"
+            + (
+                "\n\nATENÇÃO MODO ÁUDIO: deve_usar_instrucoes_audio_agora=true nesta conversa. "
+                "Perguntas sobre dependentes, filho casado, inclusão no plano etc. devem seguir "
+                "instrucoes_atendimento_audio (também repetido no fim deste bloco se vier do Laravel)."
+                if deve_usar_instrucoes_audio
+                else ""
+            )
         )
 
         messages: list[Any] = [

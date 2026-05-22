@@ -28,6 +28,10 @@ class ProcessarBody(BaseModel):
     openai_model: str | None = None
     openai_base_url: str | None = None
     instrucoes_atendimento: str | None = Field(default=None, max_length=50000)
+    instrucoes_atendimento_audio: str | None = Field(default=None, max_length=50000)
+    deve_usar_instrucoes_audio_agora: bool = False
+    conversa_em_modo_audio: bool = False
+    ultima_mensagem_cliente_tipo: str | None = None
 
 
 def _checar_token(authorization: str | None) -> None:
@@ -124,17 +128,35 @@ def processar(
         texto_len,
     )
 
+    extra_instr = (body.instrucoes_atendimento or "").strip()
+    audio_bloco = (body.instrucoes_atendimento_audio or "").strip()
+    if body.deve_usar_instrucoes_audio_agora and audio_bloco:
+        extra_instr = (
+            extra_instr
+            + "\n\n=== INSTRUÇÕES ÁUDIO (PRIORIDADE MÁXIMA — aba «quando o cliente envia áudio») ===\n"
+            + audio_bloco
+        )
+    if body.deve_usar_instrucoes_audio_agora:
+        logger.info(
+            "[agente] modo_audio_instrucoes correlation_id=%s conversa_em_modo_audio=%s ultima_tipo=%s audio_chars=%s",
+            cid,
+            body.conversa_em_modo_audio,
+            body.ultima_mensagem_cliente_tipo,
+            len(audio_bloco),
+        )
+
     try:
         out = run_agent_turn(
             laravel_api_base=body.laravel_api_base,
             token=EXPECTED_TOKEN,
             conversation_id=body.conversation_id,
             user_message=body.mensagem_texto,
-            extra_system_instructions=(body.instrucoes_atendimento or "").strip(),
+            extra_system_instructions=extra_instr,
             openai_api_key=api_key,
             openai_model=(body.openai_model or "").strip() or None,
             openai_base_url=(body.openai_base_url or "").strip() or None,
             correlation_id=cid,
+            deve_usar_instrucoes_audio=body.deve_usar_instrucoes_audio_agora,
         )
     except Exception:
         logger.exception("[agente] processar_run_agent_falhou correlation_id=%s", cid)
