@@ -141,6 +141,7 @@ def _ordenar_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Garante contexto antes de envio ao cliente; finalizar por último (se vier no lote)."""
     prioridade = {
         "buscar_contexto_cliente": 0,
+        "avisar_equipe_escalonamento": 8,
         "enviar_mensagem_texto_ao_cliente": 10,
         "enviar_link_boleto_parcela": 11,
         "enviar_recibo_parcela": 12,
@@ -229,6 +230,20 @@ def run_agent_turn(
             return _post_tool(
                 http,
                 "/agente-atendimento/tools/enviar-recibo",
+                body,
+                correlation_id=cid,
+            )
+
+        def tool_avisar_equipe_escalonamento(motivo: str, resumo: str | None = None) -> str:
+            body: dict[str, Any] = {
+                "conversation_id": conversation_id,
+                "motivo": str(motivo).strip()[:2000],
+            }
+            if resumo is not None and str(resumo).strip() != "":
+                body["resumo"] = str(resumo).strip()[:4000]
+            return _post_tool(
+                http,
+                "/agente-atendimento/tools/avisar-equipe-escalonamento",
                 body,
                 correlation_id=cid,
             )
@@ -343,6 +358,34 @@ def run_agent_turn(
             {
                 "type": "function",
                 "function": {
+                    "name": "avisar_equipe_escalonamento",
+                    "description": (
+                        "Envia mensagem automática no WhatsApp para os contatos cadastrados em "
+                        "Comportamento → Contatos escalonamento (equipe interna). "
+                        "Use quando não souber responder, precisar de humano, ou após falha em enviar boleto "
+                        "(o sistema também avisa sozinho em falhas de cobrança — chame se o cliente precisar de retorno humano). "
+                        "Depois informe o cliente que a equipe foi avisada."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "motivo": {
+                                "type": "string",
+                                "description": "Motivo do escalonamento (ex.: boleto não vinculado ao contato).",
+                            },
+                            "resumo": {
+                                "type": "string",
+                                "description": "Opcional. Resumo do que o cliente pediu e o que falhou.",
+                            },
+                        },
+                        "required": ["motivo"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "finalizar_conversa_painel",
                     "description": (
                         "Marca a conversa como FINALIZADA só no painel (sem WhatsApp). "
@@ -367,6 +410,9 @@ def run_agent_turn(
 
         tool_dispatch: dict[str, Callable[..., str]] = {
             "buscar_contexto_cliente": lambda **_: tool_contexto(),
+            "avisar_equipe_escalonamento": lambda motivo, resumo=None, **_: tool_avisar_equipe_escalonamento(
+                str(motivo), str(resumo) if resumo is not None else None
+            ),
             "enviar_mensagem_texto_ao_cliente": lambda texto, **_: tool_enviar_texto(str(texto)),
             "enviar_link_boleto_parcela": lambda parcela_id=None, parcela_ids=None, **kw: tool_enviar_boleto(
                 parcela_id, parcela_ids, **kw
@@ -441,6 +487,10 @@ def run_agent_turn(
             "Se o cliente pedir para falar com o financeiro, confirme de forma breve e evite repetir o mesmo bloco inteiro sobre 'sem contrato ativo' das mensagens anteriores. "
             "Se o cliente perguntar de onde vieram plano, valores ou datas (ex.: 'de onde você pegou', 'confirma aí'), siga instrucao_proveniencia_dados: cite contratos_ativos[].id, numero_contrato e plano_nome do JSON; "
             "não responda com frase genérica que não explica a origem. Se instrucao_multiplos_contratos_ativos vier preenchida, há mais de um contrato ativo — não misture dados entre eles. "
+            "Escalonamento humano: contatos_escalonamento_whatsapp e instrucao_contatos_escalonamento em buscar_contexto_cliente. "
+            "Se enviar_link_boleto_parcela falhar (parcela não vinculada, sem cobrança, etc.), o sistema já avisa a equipe no WhatsApp — "
+            "informe o cliente com cordialidade e NÃO invente boleto. Para outras dúvidas sem resposta, use avisar_equipe_escalonamento "
+            "antes ou junto de enviar_mensagem_texto_ao_cliente. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
             "Após chamar enviar_mensagem_texto_ao_cliente com sucesso nesta rodada, não produza mensagem adicional ao usuário: "
             "não gere novo raciocínio nem nova bolha — a ferramenta já enviou a resposta. "
