@@ -32,6 +32,9 @@ class ProcessarBody(BaseModel):
     deve_usar_instrucoes_audio_agora: bool = False
     conversa_em_modo_audio: bool = False
     ultima_mensagem_cliente_tipo: str | None = None
+    situacao_atendimento_atual: str | None = None
+    cliente_enviou_arquivo_nesta_rodada: bool = False
+    contato_e_cliente_cadastrado: bool = False
 
 
 def _checar_token(authorization: str | None) -> None:
@@ -129,6 +132,22 @@ def processar(
     )
 
     extra_instr = (body.instrucoes_atendimento or "").strip()
+    snapshot_partes: list[str] = []
+    if (body.situacao_atendimento_atual or "").strip():
+        snapshot_partes.append(f"situacao_atendimento_atual={body.situacao_atendimento_atual.strip()}")
+    snapshot_partes.append(
+        f"cliente_enviou_arquivo_nesta_rodada={'true' if body.cliente_enviou_arquivo_nesta_rodada else 'false'}"
+    )
+    snapshot_partes.append(
+        f"contato_e_cliente_cadastrado={'true' if body.contato_e_cliente_cadastrado else 'false'}"
+    )
+    if snapshot_partes:
+        extra_instr = (
+            "=== SNAPSHOT COMPORTAMENTO (DETECTADO PELO SERVIDOR NESTA RODADA) ===\n"
+            + "\n".join(snapshot_partes)
+            + "\n\n"
+            + extra_instr
+        )
     audio_bloco = (body.instrucoes_atendimento_audio or "").strip()
     if body.deve_usar_instrucoes_audio_agora and audio_bloco:
         extra_instr = (

@@ -141,6 +141,7 @@ def _ordenar_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Garante contexto antes de envio ao cliente; finalizar por último (se vier no lote)."""
     prioridade = {
         "buscar_contexto_cliente": 0,
+        "cadastrar_cliente_pelo_documento": 3,
         "avisar_equipe_escalonamento": 8,
         "enviar_mensagem_texto_ao_cliente": 10,
         "enviar_link_boleto_parcela": 11,
@@ -473,7 +474,9 @@ def run_agent_turn(
             "Você é o assistente virtual de atendimento no WhatsApp. "
             "Seja cordial, objetivo e em português do Brasil. "
             "FLUXO OBRIGATÓRIO (uma interação = uma resposta ao cliente): "
-            "(1) buscar_contexto_cliente quando precisar de dados do cadastro — no máximo uma vez; "
+            "(0) SEMPRE chame buscar_contexto_cliente como PRIMEIRA ferramenta — antes de enviar_mensagem_texto_ao_cliente; "
+            "(1) leia instrucoes_atendimento (Comportamento por situação do painel vem no topo), situacao_atendimento_atual, "
+            "situacoes_comportamento e instrucoes_comportamento_consolidadas; "
             "(2) enviar_mensagem_texto_ao_cliente UMA vez com a resposta completa (máximo 180 caracteres por bolha — "
             "se passar, o sistema divide em blocos; prefira linha em branco ou [[BLOCO]] entre blocos); "
             "se forem vários tópicos distintos (ex.: dois planos diferentes), separe cada bloco com uma linha em branco "
@@ -501,9 +504,10 @@ def run_agent_turn(
             "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
             "Se situacao_atendimento_atual for imagem_ou_documento OU cliente_enviou_arquivo_nesta_rodada for true: "
             "OBRIGATÓRIO ler instrucao_obrigatoria_imagem_ou_documento, instrucao_leitura_documento, instrucao_situacao_atual, "
-            "exemplo_resposta_documento_recebido e instrucao_resposta_documento_recebido "
-            "e situacoes_comportamento.imagem_ou_documento. Se mensagens_recentes ou mensagem_texto tiverem "
-            "\"leitura automática do documento\", USE TIPO_DOCUMENTO, NOME_TITULAR e PRIMEIRO_NOME_TITULAR. "
+            "exemplo_resposta_documento_recebido, instrucao_resposta_documento_recebido, "
+            "instrucoes_comportamento_consolidadas e situacoes_comportamento.imagem_ou_documento (texto cadastrado no painel Comportamento). "
+            "NÃO responda com saudação genérica \"Como posso te ajudar\" — siga as orientações do painel para imagem/documento. "
+            "Se mensagens_recentes ou mensagem_texto tiverem \"leitura automática do documento\", USE TIPO_DOCUMENTO, NOME_TITULAR e PRIMEIRO_NOME_TITULAR. "
             "Na PRIMEIRA resposta após receber o arquivo, siga exemplo_resposta_documento_recebido "
             "(ex.: \"Recebi a CNH do Douglas, o que você gostaria que eu fizesse com o documento dele?\"). "
             "Se o cliente perguntar \"qual o nome\" ou sobre o documento, leia nome_titular_documento_recente, "
@@ -523,7 +527,8 @@ def run_agent_turn(
             "Se conversa_ja_tem_historico for true, o atendimento já começou — sem tom de primeira conversa. "
             "Nunca use 'Seja bem-vindo(a)', 'bem-vindo à empresa' nem reinicie como primeiro contato. "
             "Com nome_primeiro (e nome_declarado_pelo_cliente_nas_mensagens em saudacao) use quem está FALANDO no chat; NUNCA use termos de plano/contrato como nome (carência, mensalidade, contrato, parcela, titular). "
-            "Se não houver nome de pessoa em saudacao nem nome_cliente_ja_informado, cumprimente sem inventar nome. "
+            "Se não houver nome de pessoa em saudacao nem nome_cliente_ja_informado, cumprimente sem inventar nome — "
+            "PROIBIDO \"Oi, **!\", \"Oi, !\" ou asteriscos no lugar do nome. "
             "Quando financeiro_mesmo_cadastro_que_vinculo_conversa for false, "
             "leia instrucao_como_chamar_o_cliente e não trate o titular do contrato (cliente_nome) como o nome do interlocutor. "
             "Com historico mas sem nome em saudacao: mesmo assim não abra com Oi/Bom dia/Boa noite — vá direto ao ponto. "
