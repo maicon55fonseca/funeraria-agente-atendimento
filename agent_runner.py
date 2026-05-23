@@ -249,6 +249,14 @@ def run_agent_turn(
                 correlation_id=cid,
             )
 
+        def tool_cadastrar_cliente_documento() -> str:
+            return _post_tool(
+                http,
+                "/agente-atendimento/tools/cadastrar-cliente-documento",
+                {"conversation_id": conversation_id},
+                correlation_id=cid,
+            )
+
         def tool_finalizar_conversa(motivo: str | None = None) -> str:
             body: dict[str, Any] = {"conversation_id": conversation_id}
             if motivo is not None and str(motivo).strip() != "":
@@ -389,6 +397,32 @@ def run_agent_turn(
             {
                 "type": "function",
                 "function": {
+                    "name": "cadastrar_cliente_pelo_documento",
+                    "description": (
+                        "Cadastra automaticamente o cliente no sistema (equivalente a Clientes → Novo) usando os dados "
+                        "extraídos do RG/CNH enviado no WhatsApp: nome completo, CPF, data de nascimento, filiação (nome da mãe/pai), "
+                        "RG, sexo e endereço quando legíveis. Também vincula o telefone do WhatsApp e associa à conversa. "
+                        "OBRIGATÓRIO quando contato_e_cliente_cadastrado for false, o cliente enviou documento e quer contratar/cadastrar plano "
+                        "(cliente_indicou_documento_proprio ou pode_cadastrar_cliente_pelo_documento true). "
+                        "Chame ANTES de pedir nome, CPF ou data de nascimento manualmente. "
+                        "Depois confirme ao cliente com enviar_mensagem_texto_ao_cliente e siga com valores/plano."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "motivo": {
+                                "type": "string",
+                                "description": "Opcional. Ex.: cliente enviou CNH e quer se cadastrar no plano.",
+                            },
+                        },
+                        "required": [],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "finalizar_conversa_painel",
                     "description": (
                         "Marca a conversa como FINALIZADA só no painel (sem WhatsApp). "
@@ -423,6 +457,7 @@ def run_agent_turn(
             "enviar_recibo_parcela": lambda parcela_id=None, **_: tool_enviar_recibo(
                 int(parcela_id) if parcela_id is not None else None
             ),
+            "cadastrar_cliente_pelo_documento": lambda **_: tool_cadastrar_cliente_documento(),
             "finalizar_conversa_painel": lambda motivo=None, **_: tool_finalizar_conversa(
                 str(motivo).strip() if motivo is not None and str(motivo).strip() != "" else None
             ),
@@ -477,6 +512,9 @@ def run_agent_turn(
             "Se cliente_indicou_documento_proprio for true OU o cliente disser que o documento é dele / quer se cadastrar no plano, "
             "use nome_cliente_ja_informado (nome lido no documento) e instrucao_documento_pertence_ao_cliente — "
             "NÃO peça o nome de novo; avance no cadastro ou no assunto pedido. "
+            "Se contato_e_cliente_cadastrado for false e o cliente enviou RG/CNH querendo plano/cadastro: "
+            "OBRIGATÓRIO chamar cadastrar_cliente_pelo_documento (lê nome, CPF, nascimento, filiação do documento e grava no cadastro) "
+            "antes de pedir dados manualmente — veja instrucao_cadastro_cliente_whatsapp e dados_extraidos_documento em buscar_contexto_cliente. "
             "Para dados de contrato, parcelas ou histórico da conversa, use buscar_contexto_cliente (lá vêm mensagens_recentes, "
             "regras de pausa pós-atendente humano, status, instrucao_limite_caracteres_resposta, max_caracteres_bloco_resposta e o objeto data.saudacao). "
             "Saudação e continuidade: após buscar_contexto_cliente, leia body.data.saudacao (se o retorno vier em envelope HTTP, use body.data). "
