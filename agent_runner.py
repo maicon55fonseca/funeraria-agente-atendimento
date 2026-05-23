@@ -364,11 +364,10 @@ def run_agent_turn(
                 "function": {
                     "name": "avisar_equipe_escalonamento",
                     "description": (
-                        "Envia mensagem automática no WhatsApp para os contatos cadastrados em "
-                        "Comportamento → Contatos escalonamento (equipe interna). "
-                        "Use quando não souber responder, precisar de humano, ou após falha em enviar boleto "
-                        "(o sistema também avisa sozinho em falhas de cobrança — chame se o cliente precisar de retorno humano). "
-                        "Depois informe o cliente que a equipe foi avisada."
+                        "OBRIGATÓRIO quando não souber responder ou precisar de humano: envia WhatsApp aos contatos "
+                        "cadastrados em Comportamento → Contatos escalonamento, com resumo automático da conversa. "
+                        "Chame ANTES de enviar_mensagem_texto_ao_cliente. Passe motivo claro e resumo curto do pedido do cliente. "
+                        "O sistema também avisa sozinho em falhas de boleto. Depois informe o cliente que a equipe foi avisada."
                     ),
                     "parameters": {
                         "type": "object",
@@ -496,8 +495,9 @@ def run_agent_turn(
             "não responda com frase genérica que não explica a origem. Se instrucao_multiplos_contratos_ativos vier preenchida, há mais de um contrato ativo — não misture dados entre eles. "
             "Escalonamento humano: contatos_escalonamento_whatsapp e instrucao_contatos_escalonamento em buscar_contexto_cliente. "
             "Se enviar_link_boleto_parcela falhar (parcela não vinculada, sem cobrança, etc.), o sistema já avisa a equipe no WhatsApp — "
-            "informe o cliente com cordialidade e NÃO invente boleto. Para outras dúvidas sem resposta, use avisar_equipe_escalonamento "
-            "antes ou junto de enviar_mensagem_texto_ao_cliente. "
+            "informe o cliente com cordialidade e NÃO invente boleto. Se não souber responder: chame avisar_equipe_escalonamento "
+            "(motivo + resumo) ANTES de enviar_mensagem_texto_ao_cliente — o sistema manda WhatsApp aos contatos de escalonamento "
+            "com histórico da conversa. "
             "Modo áudio: se buscar_contexto_cliente retornar deve_usar_instrucoes_audio_agora=true, "
             "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
