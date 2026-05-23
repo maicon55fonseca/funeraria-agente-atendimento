@@ -516,6 +516,8 @@ def run_agent_turn(
             "Se cliente_indicou_documento_proprio for true OU o cliente disser que o documento é dele / quer se cadastrar no plano, "
             "use nome_cliente_ja_informado (nome lido no documento) e instrucao_documento_pertence_ao_cliente — "
             "NÃO peça o nome de novo; avance no cadastro ou no assunto pedido. "
+            "Se cadastro_automatico_realizado for true OU cadastro_automatico_cliente_id existir: o cadastro JÁ FOI FEITO com dados do documento — "
+            "confirme ao cliente (nome em cadastro_automatico_nome) e siga com o plano; PROIBIDO pedir nome completo, CPF ou nascimento. "
             "Se contato_e_cliente_cadastrado for false e o cliente enviou RG/CNH querendo plano/cadastro: "
             "OBRIGATÓRIO chamar cadastrar_cliente_pelo_documento (lê nome, CPF, nascimento, filiação do documento e grava no cadastro) "
             "antes de pedir dados manualmente — veja instrucao_cadastro_cliente_whatsapp e dados_extraidos_documento em buscar_contexto_cliente. "
