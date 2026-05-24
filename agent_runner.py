@@ -553,6 +553,7 @@ def run_agent_turn(
             "Para próxima parcela a vencer (data e valor), siga estritamente instrucao_proxima_parcela_vencimento e proxima_parcela_em_aberto; não infira só com dia_vencimento do contrato. "
             "Para dizer se há parcelas em aberto, atraso ou se o cliente 'está em dia', siga instrucao_parcelas_aberto_atraso e os números em financeiro_resumo (parcelas_em_aberto, parcelas_em_atraso, data_referencia_hoje). "
             "Quando pedirem parcelas EM ATRASO ou VENCIDAS, liste SOMENTE parcelas_em_atraso_lista — NUNCA trate parcelas futuras (em_atraso=false) como vencidas. "
+            "Siga instrucao_dados_financeiros_vs_historico: se o histórico (mensagens_recentes do agente_ia) disser outra quantidade ou meses de parcelas vencidas, IGNORE o histórico e use os arrays financeiros atuais do JSON. "
             "Não contradiga os contadores de financeiro_resumo. "
             "Se data.instrucao_cadastro_sem_contrato_ativo_listado vier preenchida ou cadastro_financeiro_sem_contrato_ativo_listado for true, siga essa instrução: "
             "se contratos_cancelados tiver itens ou qtd_contratos_cancelados_no_cadastro > 0 ou instrucao_contratos_cancelados vier preenchida, informe que o plano consta cancelado no cadastro e cite numero_contrato/plano_nome/data_cancelamento; "
