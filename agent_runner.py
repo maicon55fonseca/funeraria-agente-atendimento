@@ -575,6 +575,10 @@ def run_agent_turn(
             "Modo áudio: se buscar_contexto_cliente retornar deve_usar_instrucoes_audio_agora=true, "
             "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
+            "Após chamar enviar_mensagem_texto_ao_cliente (sucesso ou recusa do sistema), não chame essa ferramenta de novo nesta interação — "
+            "aguarde o cliente responder. Se a tool retornar ok:false, corrija na PRÓXIMA mensagem do cliente, não envie várias bolhas seguidas. "
+            "PROIBIDO mandar sequência de mensagens sem o cliente falar entre elas (ex.: recebi documento + vou cadastrar + peça foto + tentei de novo). "
+            "Uma interação = no máximo UMA bolha de texto ao cliente (o sistema pode dividir só se passar de 180 caracteres). "
             "Após chamar enviar_mensagem_texto_ao_cliente com sucesso nesta rodada, não produza mensagem adicional ao usuário: "
             "não gere novo raciocínio nem nova bolha — a ferramenta já enviou a resposta. "
             "Em cada passagem de ferramentas: no máximo UMA chamada a enviar_mensagem_texto_ao_cliente (uma bolha por vez); "
@@ -597,15 +601,19 @@ def run_agent_turn(
         max_turns = 4
         last_text = ""
         entregou_algo_ao_cliente_whatsapp = False
+        tentou_enviar_texto_whatsapp = False
         contexto_obtido_no_turno: int | None = None
 
         for turn in range(max_turns):
-            if entregou_algo_ao_cliente_whatsapp:
+            if entregou_algo_ao_cliente_whatsapp or tentou_enviar_texto_whatsapp:
                 logger.info(
-                    "[agente] parada_entrega_ja_realizada correlation_id=%s conversation_id=%s turn=%s",
+                    "[agente] parada_entrega_ja_realizada correlation_id=%s conversation_id=%s turn=%s "
+                    "entregou=%s tentou_texto=%s",
                     cid,
                     conversation_id,
                     turn,
+                    entregou_algo_ao_cliente_whatsapp,
+                    tentou_enviar_texto_whatsapp,
                 )
                 break
 
@@ -743,6 +751,27 @@ def run_agent_turn(
                     )
                     messages.append(ToolMessage(content=payload, tool_call_id=tid))
                     continue
+
+                if name == "enviar_mensagem_texto_ao_cliente" and tentou_enviar_texto_whatsapp:
+                    logger.warning(
+                        "[agente] enviar_texto_bloqueado_ja_tentou_nesta_interacao correlation_id=%s turn=%s conversation_id=%s",
+                        cid,
+                        turn,
+                        conversation_id,
+                    )
+                    payload = json.dumps(
+                        {
+                            "ok": True,
+                            "skipped_duplicate": True,
+                            "message": (
+                                "Já houve tentativa de enviar mensagem ao cliente nesta interação. "
+                                "Aguarde a resposta do cliente — não envie outra bolha."
+                            ),
+                        },
+                        ensure_ascii=False,
+                    )
+                    messages.append(ToolMessage(content=payload, tool_call_id=tid))
+                    continue
                 fn = tool_dispatch.get(name)
                 if fn is None:
                     payload = json.dumps({"erro": f"ferramenta_desconhecida:{name}"}, ensure_ascii=False)
@@ -758,6 +787,8 @@ def run_agent_turn(
                             if name == "enviar_mensagem_texto_ao_cliente":
                                 texto_whatsapp_ja_enviado_neste_batch = True
                                 last_text = str(args.get("texto") or "")
+                        if name == "enviar_mensagem_texto_ao_cliente":
+                            tentou_enviar_texto_whatsapp = True
                     except Exception as exc:  # noqa: BLE001
                         logger.warning(
                             "[agente] llm_tool_exec_erro correlation_id=%s tool=%s erro=%s",
@@ -768,17 +799,17 @@ def run_agent_turn(
                         payload = json.dumps({"erro": str(exc)}, ensure_ascii=False)
                 messages.append(ToolMessage(content=payload, tool_call_id=tid))
 
-            if entregou_algo_ao_cliente_whatsapp:
+            if entregou_algo_ao_cliente_whatsapp or tentou_enviar_texto_whatsapp:
                 logger.info(
-                    "[agente] parada_apos_entrega_cliente correlation_id=%s turn=%s conversation_id=%s "
-                    "(fluxo: contexto → resposta → parar; sem nova invocação do modelo)",
+                    "[agente] parada_apos_entrega_ou_tentativa_texto correlation_id=%s turn=%s conversation_id=%s "
+                    "(uma mensagem por interação; aguardar resposta do cliente)",
                     cid,
                     turn,
                     conversation_id,
                 )
                 break
 
-        if not entregou_algo_ao_cliente_whatsapp:
+        if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
             msg = (last_text or "").strip()
             if not msg:
                 msg = (
