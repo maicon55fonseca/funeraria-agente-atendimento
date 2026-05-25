@@ -387,7 +387,10 @@ def run_agent_turn(
                             },
                             "resumo": {
                                 "type": "string",
-                                "description": "Opcional. Resumo do que o cliente pediu e o que falhou.",
+                                "description": (
+                                    "Opcional. Resumo narrativo para a equipe (frases com A cliente/A IA/A Agente). "
+                                    "O sistema também gera resumo automático se omitir."
+                                ),
                             },
                         },
                         "required": ["motivo"],
