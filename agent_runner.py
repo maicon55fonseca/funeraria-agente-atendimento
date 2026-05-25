@@ -406,6 +406,7 @@ def run_agent_turn(
                         "OBRIGATÓRIO quando contato_e_cliente_cadastrado for false, o cliente enviou documento e quer contratar/cadastrar plano "
                         "(cliente_indicou_documento_proprio ou pode_cadastrar_cliente_pelo_documento true). "
                         "Chame ANTES de pedir nome, CPF ou data de nascimento manualmente. "
+                        "PROIBIDO afirmar 'cadastro realizado/com sucesso' sem esta tool retornar ok=true. "
                         "Depois confirme ao cliente com enviar_mensagem_texto_ao_cliente e siga com valores/plano."
                     ),
                     "parameters": {
@@ -518,6 +519,8 @@ def run_agent_turn(
             "NÃO peça o nome de novo; avance no cadastro ou no assunto pedido. "
             "Se cadastro_automatico_realizado for true OU cadastro_automatico_cliente_id existir: o cadastro JÁ FOI FEITO com dados do documento — "
             "confirme ao cliente (nome em cadastro_automatico_nome) e siga com o plano; PROIBIDO pedir nome completo, CPF, nova foto ou nascimento. "
+            "PROIBIDO dizer 'cadastro realizado com sucesso' ou equivalente sem cadastro_automatico_realizado=true "
+            "ou sem cadastrar_cliente_pelo_documento retornando ok=true nesta rodada. "
             "Se precisa_cadastrar_pelo_documento_agora for true OU cadastro_automatico_falhou existir: "
             "OBRIGATÓRIO chamar cadastrar_cliente_pelo_documento como PRIMEIRA ferramenta nesta rodada — "
             "NÃO diga que a equipe vai finalizar manualmente antes de chamar a tool. "
