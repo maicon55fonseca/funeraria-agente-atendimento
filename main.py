@@ -35,6 +35,14 @@ class ProcessarBody(BaseModel):
     situacao_atendimento_atual: str | None = None
     cliente_enviou_arquivo_nesta_rodada: bool = False
     contato_e_cliente_cadastrado: bool = False
+    ia_central_ativa: bool = False
+    ia_central_modo_atual: str | None = None
+    ia_central_emocao: str | None = None
+    ia_central_intencao: str | None = None
+    ia_central_risco_cancelamento: int | None = None
+    ia_central_instrucoes_modo: str | None = None
+    ia_central_supervisao: str | None = None
+    ia_central_bloquear_comercial: bool = False
 
 
 def _checar_token(authorization: str | None) -> None:
@@ -149,6 +157,23 @@ def processar(
             + extra_instr
         )
     audio_bloco = (body.instrucoes_atendimento_audio or "").strip()
+    if body.ia_central_ativa:
+        ia_partes: list[str] = [
+            "=== IA CENTRAL (ORQUESTRADOR) ===",
+            f"modo_atual={body.ia_central_modo_atual or 'geral'}",
+            f"emocao={body.ia_central_emocao or 'neutro'}",
+            f"intencao={body.ia_central_intencao or ''}",
+        ]
+        if body.ia_central_risco_cancelamento is not None:
+            ia_partes.append(f"risco_cancelamento={body.ia_central_risco_cancelamento}%")
+        if body.ia_central_bloquear_comercial:
+            ia_partes.append("bloquear_comercial=true (modo luto/acionamento)")
+        if (body.ia_central_supervisao or "").strip():
+            ia_partes.append(body.ia_central_supervisao.strip())
+        if (body.ia_central_instrucoes_modo or "").strip():
+            ia_partes.append(body.ia_central_instrucoes_modo.strip())
+        extra_instr = "\n".join(ia_partes) + "\n\n" + extra_instr
+
     if body.deve_usar_instrucoes_audio_agora and audio_bloco:
         extra_instr = (
             extra_instr
