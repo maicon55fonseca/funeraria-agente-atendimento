@@ -43,6 +43,9 @@ class ProcessarBody(BaseModel):
     ia_central_instrucoes_modo: str | None = None
     ia_central_supervisao: str | None = None
     ia_central_bloquear_comercial: bool = False
+    ia_central_classificador_fonte: str | None = None
+    ia_central_llm_confianca: int | None = None
+    ia_central_llm_resumo: str | None = None
 
 
 def _checar_token(authorization: str | None) -> None:
@@ -172,6 +175,12 @@ def processar(
             ia_partes.append(body.ia_central_supervisao.strip())
         if (body.ia_central_instrucoes_modo or "").strip():
             ia_partes.append(body.ia_central_instrucoes_modo.strip())
+        ia_resumo = getattr(body, "ia_central_llm_resumo", None)
+        if ia_resumo and str(ia_resumo).strip():
+            ia_partes.append(f"contexto_interpretado={str(ia_resumo).strip()}")
+        ia_fonte = getattr(body, "ia_central_classificador_fonte", None)
+        if ia_fonte:
+            ia_partes.append(f"classificador_fonte={ia_fonte}")
         extra_instr = "\n".join(ia_partes) + "\n\n" + extra_instr
 
     if body.deve_usar_instrucoes_audio_agora and audio_bloco:
