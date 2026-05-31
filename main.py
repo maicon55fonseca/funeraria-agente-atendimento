@@ -27,8 +27,8 @@ class ProcessarBody(BaseModel):
     openai_api_key: str | None = None
     openai_model: str | None = None
     openai_base_url: str | None = None
-    instrucoes_atendimento: str | None = Field(default=None, max_length=50000)
-    instrucoes_atendimento_audio: str | None = Field(default=None, max_length=50000)
+    instrucoes_atendimento: str | None = Field(default=None, max_length=80000)
+    instrucoes_atendimento_audio: str | None = Field(default=None, max_length=80000)
     deve_usar_instrucoes_audio_agora: bool = False
     conversa_em_modo_audio: bool = False
     ultima_mensagem_cliente_tipo: str | None = None
