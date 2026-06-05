@@ -481,6 +481,8 @@ def run_agent_turn(
             "(0) SEMPRE chame buscar_contexto_cliente como PRIMEIRA ferramenta — antes de enviar_mensagem_texto_ao_cliente; "
             "(1) leia instrucoes_atendimento (Comportamento por situação do painel vem no topo), situacao_atendimento_atual, "
             "situacoes_comportamento e instrucoes_comportamento_consolidadas; "
+            "aplique o tom de ia_central_tom_comunicacao / instrucao_ia_central_tom_comunicacao do buscar_contexto_cliente "
+            "(prevalece sobre tom genérico deste prompt); "
             "(2) enviar_mensagem_texto_ao_cliente UMA vez com a resposta completa (máximo 180 caracteres por bolha — "
             "se passar, o sistema divide em blocos; prefira linha em branco ou [[BLOCO]] entre blocos); "
             "se forem vários tópicos distintos (ex.: dois planos diferentes), separe cada bloco com uma linha em branco "
