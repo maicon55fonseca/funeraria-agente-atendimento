@@ -675,7 +675,7 @@ def run_agent_turn(
             "PROIBIDO repassar nomes/telefones da equipe ao cliente; use avisar_equipe_escalonamento. "
             "Conhecimento operacional: ia_central_mapa_modulos_sistema, instrucao_ia_central_conhecimento_operacional e instrucao_ia_central_proibicao_dados_internos. "
             "COMPROVANTE x COBRANÇA: se cliente_enviou_arquivo_nesta_rodada ou leitura indicar comprovante/PIX/pagamento, siga instrucao_comprovante_pagamento_whatsapp — "
-            "PROIBIDO cobrar, listar parcelas em atraso ou enviar PIX nessa rodada. "
+            "PROIBIDO cobrar, listar parcelas em atraso, enviar PIX ou repetir dados de cadastro (CPF/nome) nessa rodada; o backend analisa o arquivo e agradece conforme o meio de pagamento. "
             "Pergunta de confirmação ('não paguei maio?', 'confirma aí') = consulta de status — use financeiro_resumo, não agradeça comprovante. "
             "Se enviar_link_boleto_parcela falhar (parcela não vinculada, sem cobrança, etc.), o sistema já avisa a equipe no WhatsApp — "
             "informe o cliente com cordialidade e NÃO invente boleto. Se não souber responder ou a informação não estiver nas abas do modo IA Central: "
