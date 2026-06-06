@@ -681,6 +681,8 @@ def run_agent_turn(
             "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
             "PROIBIDO usar markdown (**negrito**) nas mensagens ao cliente — texto simples apenas. "
+            "Cadastro e contratação: fale como atendente humano em primeira pessoa (eu cadastro, já registrei, quando eu finalizar te aviso). "
+            "PROIBIDO: o sistema avisa, quando estiver certo no sistema, cadastro automático. "
             "Após chamar enviar_mensagem_texto_ao_cliente (sucesso ou recusa do sistema), não chame essa ferramenta de novo nesta interação — "
             "aguarde o cliente responder. Se a tool retornar ok:false, corrija na PRÓXIMA mensagem do cliente, não envie várias bolhas seguidas. "
             "PROIBIDO mandar sequência de mensagens sem o cliente falar entre elas (ex.: recebi documento + vou cadastrar + peça foto + tentei de novo). "
