@@ -254,7 +254,7 @@ def run_agent_turn(
         model_name,
     )
 
-    with httpx.Client(base_url=base, headers=headers, timeout=120.0) as http:
+    with httpx.Client(base_url=base, headers=headers, timeout=150.0) as http:
 
         def tool_contexto() -> str:
             return _post_tool(
