@@ -198,6 +198,19 @@ def processar(
             len(audio_bloco),
         )
 
+    max_extra_instr = 18000
+    if len(extra_instr) > max_extra_instr:
+        logger.warning(
+            "[agente] extra_instr_truncada correlation_id=%s chars_original=%s chars_final=%s",
+            cid,
+            len(extra_instr),
+            max_extra_instr,
+        )
+        extra_instr = (
+            extra_instr[:max_extra_instr]
+            + "\n\n[INSTRUÇÕES TRUNCADAS: use buscar_contexto_cliente para detalhes completos.]"
+        )
+
     try:
         out = run_agent_turn(
             laravel_api_base=body.laravel_api_base,

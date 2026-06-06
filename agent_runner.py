@@ -120,6 +120,76 @@ TOOLS_ENTREGA_AO_CLIENTE = frozenset(
 )
 
 
+_CAMPOS_INSTRUCOES_GRANDES = frozenset(
+    {
+        "instrucoes_atendimento",
+        "instrucoes_atendimento_geral",
+        "instrucoes_atendimento_audio",
+        "instrucoes_comportamento_consolidadas",
+        "ia_central_instrucoes_modo",
+        "ia_central_supervisao",
+    }
+)
+
+
+def _truncar_texto(s: str, max_len: int) -> str:
+    t = (s or "").strip()
+    if len(t) <= max_len:
+        return t
+    return t[: max_len - 3] + "..."
+
+
+def _compactar_resposta_contexto(payload: str, *, correlation_id: str = "-") -> str:
+    """Reduz campos enormes do contexto Laravel para caber no limite do modelo."""
+    try:
+        envio = json.loads(payload)
+    except Exception:
+        return payload
+
+    body = envio.get("body")
+    if not isinstance(body, dict):
+        return payload
+
+    data = body.get("data") if isinstance(body.get("data"), dict) else body
+    if not isinstance(data, dict):
+        return payload
+
+    alterou = False
+    for campo in _CAMPOS_INSTRUCOES_GRANDES:
+        valor = data.get(campo)
+        if isinstance(valor, str) and len(valor) > 12000:
+            data[campo] = _truncar_texto(valor, 12000)
+            alterou = True
+
+    recentes = data.get("mensagens_recentes")
+    if isinstance(recentes, list) and len(recentes) > 10:
+        data["mensagens_recentes"] = recentes[-10:]
+        alterou = True
+
+    if isinstance(recentes, list):
+        for item in data.get("mensagens_recentes") or []:
+            if not isinstance(item, dict):
+                continue
+            for chave in ("texto", "body", "body_text", "conteudo"):
+                if isinstance(item.get(chave), str) and len(item[chave]) > 500:
+                    item[chave] = _truncar_texto(item[chave], 500)
+                    alterou = True
+
+    if alterou:
+        if isinstance(body.get("data"), dict):
+            body["data"] = data
+        else:
+            envio["body"] = data
+        logger.info(
+            "[agente] contexto_compactado correlation_id=%s mensagens=%s",
+            correlation_id,
+            len(data.get("mensagens_recentes") or []),
+        )
+        return json.dumps(envio, ensure_ascii=False)
+
+    return payload
+
+
 def _tool_resposta_foi_sucesso(payload: str) -> bool:
     """True se HTTP ok e body não indica falha explícita (ok:false)."""
     try:
@@ -585,7 +655,12 @@ def run_agent_turn(
             "Se o cliente pedir para falar com o financeiro, confirme de forma breve e evite repetir o mesmo bloco inteiro sobre 'sem contrato ativo' das mensagens anteriores. "
             "Se o cliente perguntar de onde vieram plano, valores ou datas (ex.: 'de onde você pegou', 'confirma aí'), siga instrucao_proveniencia_dados: cite contratos_ativos[].id, numero_contrato e plano_nome do JSON; "
             "não responda com frase genérica que não explica a origem. Se instrucao_multiplos_contratos_ativos vier preenchida, há mais de um contrato ativo — não misture dados entre eles. "
-            "Escalonamento humano: contatos_escalonamento_whatsapp e instrucao_contatos_escalonamento em buscar_contexto_cliente. "
+            "Escalonamento humano: qtd_contatos_escalonamento_cadastrados, ferramenta_escalonamento e instrucao_contatos_escalonamento em buscar_contexto_cliente — "
+            "PROIBIDO repassar nomes/telefones da equipe ao cliente; use avisar_equipe_escalonamento. "
+            "Conhecimento operacional: ia_central_mapa_modulos_sistema, instrucao_ia_central_conhecimento_operacional e instrucao_ia_central_proibicao_dados_internos. "
+            "COMPROVANTE x COBRANÇA: se cliente_enviou_arquivo_nesta_rodada ou leitura indicar comprovante/PIX/pagamento, siga instrucao_comprovante_pagamento_whatsapp — "
+            "PROIBIDO cobrar, listar parcelas em atraso ou enviar PIX nessa rodada. "
+            "Pergunta de confirmação ('não paguei maio?', 'confirma aí') = consulta de status — use financeiro_resumo, não agradeça comprovante. "
             "Se enviar_link_boleto_parcela falhar (parcela não vinculada, sem cobrança, etc.), o sistema já avisa a equipe no WhatsApp — "
             "informe o cliente com cordialidade e NÃO invente boleto. Se não souber responder ou for dizer que vai verificar/confirmar informação: "
             "chame avisar_equipe_escalonamento (motivo + resumo) ANTES de enviar_mensagem_texto_ao_cliente — o sistema também avisa automaticamente "
@@ -815,6 +890,8 @@ def run_agent_turn(
                             exc,
                         )
                         payload = json.dumps({"erro": str(exc)}, ensure_ascii=False)
+                if name == "buscar_contexto_cliente":
+                    payload = _compactar_resposta_contexto(payload, correlation_id=cid)
                 messages.append(ToolMessage(content=payload, tool_call_id=tid))
 
             if entregou_algo_ao_cliente_whatsapp or tentou_enviar_texto_whatsapp:
