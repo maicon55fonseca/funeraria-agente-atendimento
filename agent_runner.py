@@ -680,6 +680,7 @@ def run_agent_turn(
             "Modo áudio: se buscar_contexto_cliente retornar deve_usar_instrucoes_audio_agora=true, "
             "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
             "Não invente valores ou links; use apenas o retorno das ferramentas. "
+            "PROIBIDO usar markdown (**negrito**) nas mensagens ao cliente — texto simples apenas. "
             "Após chamar enviar_mensagem_texto_ao_cliente (sucesso ou recusa do sistema), não chame essa ferramenta de novo nesta interação — "
             "aguarde o cliente responder. Se a tool retornar ok:false, corrija na PRÓXIMA mensagem do cliente, não envie várias bolhas seguidas. "
             "PROIBIDO mandar sequência de mensagens sem o cliente falar entre elas (ex.: recebi documento + vou cadastrar + peça foto + tentei de novo). "
