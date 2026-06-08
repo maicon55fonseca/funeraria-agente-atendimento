@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from typing import Any, Callable
 
@@ -188,6 +189,55 @@ def _compactar_resposta_contexto(payload: str, *, correlation_id: str = "-") -> 
         return json.dumps(envio, ensure_ascii=False)
 
     return payload
+
+
+def _texto_pediu_dados_pagamento(texto: str) -> bool:
+    """Espelha textoSolicitaDadosPagamento do backend (boleto, PIX, link, linha digitável)."""
+    t = (texto or "").lower().strip()
+    if not t:
+        return False
+    if re.search(
+        r"^\s*(pix|boleto|linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|link)(\s+por\s+favor)?[.!?…\s]*$",
+        t,
+    ):
+        return True
+    if re.search(
+        r"\b(manda|envia|envie|me\s+manda|me\s+envia|passa|quero|preciso|pode\s+enviar|tem\s+como\s+enviar)\b"
+        r".{0,40}\b(pix|boleto|linha\s+digit[aá]vel|c[oó]digo\s+de\s+barras|link)\b",
+        t,
+    ):
+        return True
+    return bool(
+        re.search(
+            r"\b(como\s+(eu\s+)?pago|dados\s+para\s+pagamento|segunda\s+via|2[ªa]\s+via|"
+            r"link\s+de\s+pagamento|link\s+do\s+boleto|link\s+da\s+cobran[cç]a)\b",
+            t,
+        )
+    )
+
+
+def _extrair_parcela_ids_contexto(payload: str) -> list[int]:
+    try:
+        parsed = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    data = parsed.get("data") if isinstance(parsed, dict) else None
+    if not isinstance(data, dict):
+        data = parsed if isinstance(parsed, dict) else {}
+    parcelas = data.get("parcelas_em_atraso_lista") or data.get("parcelas_em_aberto_lista") or []
+    if not isinstance(parcelas, list):
+        return []
+    ids: list[int] = []
+    for item in parcelas[:8]:
+        if not isinstance(item, dict):
+            continue
+        pid = item.get("parcela_id")
+        if pid is not None:
+            try:
+                ids.append(int(pid))
+            except (TypeError, ValueError):
+                continue
+    return ids
 
 
 def _tool_resposta_foi_sucesso(payload: str) -> bool:
@@ -928,25 +978,46 @@ def run_agent_turn(
                 break
 
         if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
-            msg = (last_text or "").strip()
-            if not msg:
-                msg = (
-                    "Recebi sua mensagem. O que você precisa — contrato, parcela, boleto ou outra dúvida? "
-                    "Se puder, responda em uma frase."
+            if _texto_pediu_dados_pagamento(user_message):
+                ctx_payload = tool_contexto()
+                parcela_ids = _extrair_parcela_ids_contexto(ctx_payload)
+                if parcela_ids:
+                    boleto_payload = tool_enviar_boleto(parcela_ids=parcela_ids)
+                    if _tool_resposta_foi_sucesso(boleto_payload):
+                        logger.info(
+                            "[agente] envio_boleto_fallback_pedido_explicito correlation_id=%s conversation_id=%s parcela_ids=%s",
+                            cid,
+                            conversation_id,
+                            parcela_ids,
+                        )
+                        entregou_algo_ao_cliente_whatsapp = True
+
+            if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
+                msg = (last_text or "").strip()
+                if not msg:
+                    if _texto_pediu_dados_pagamento(user_message):
+                        msg = (
+                            "Entendi que você precisa dos dados para pagamento. "
+                            "Vou verificar suas parcelas em aberto e já te retorno."
+                        )
+                    else:
+                        msg = (
+                            "Recebi sua mensagem. O que você precisa — contrato, parcela, boleto ou outra dúvida? "
+                            "Se puder, responda em uma frase."
+                        )
+                logger.info(
+                    "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
+                    cid,
+                    conversation_id,
+                    len(msg),
                 )
-            logger.info(
-                "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
-                cid,
-                conversation_id,
-                len(msg),
-            )
-            _post_tool(
-                http,
-                "/agente-atendimento/tools/enviar-texto",
-                {"conversation_id": conversation_id, "texto": msg},
-                correlation_id=cid,
-            )
-            last_text = msg
+                _post_tool(
+                    http,
+                    "/agente-atendimento/tools/enviar-texto",
+                    {"conversation_id": conversation_id, "texto": msg},
+                    correlation_id=cid,
+                )
+                last_text = msg
 
         logger.info(
             "[agente] openai_output_final correlation_id=%s conversation_id=%s chars=%s texto=%s",
