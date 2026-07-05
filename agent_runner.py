@@ -730,6 +730,8 @@ def run_agent_turn(
             "COMPROVANTE x COBRANÇA: se cliente_enviou_arquivo_nesta_rodada ou leitura indicar comprovante/PIX/pagamento, siga instrucao_comprovante_pagamento_whatsapp — "
             "PROIBIDO cobrar, listar parcelas em atraso, enviar PIX ou repetir dados de cadastro (CPF/nome) nessa rodada; o backend analisa o arquivo e agradece conforme o meio de pagamento. "
             "Pergunta de confirmação ('não paguei maio?', 'confirma aí') = consulta de status — use financeiro_resumo, não agradeça comprovante. "
+            "Se o cliente enviou comprovante (Pix/boleto) e pergunta quantas parcelas ficam em aberto/atraso ou confirma a situação ('fica só uma em aberto?'), "
+            "use projecao_pos_pagamento_comprovante do JSON (valor do comprovante + simulação de baixa) — NÃO use só financeiro_resumo atual sem considerar o pagamento enviado. "
             "Se enviar_link_boleto_parcela falhar (parcela não vinculada, sem cobrança, etc.), o sistema já avisa a equipe no WhatsApp — "
             "informe o cliente com cordialidade e NÃO invente boleto. Se não souber responder ou a informação não estiver nas abas do modo IA Central: "
             "chame avisar_equipe_escalonamento (motivo + resumo com APENAS a pergunta do cliente) ANTES de enviar_mensagem_texto_ao_cliente; "
