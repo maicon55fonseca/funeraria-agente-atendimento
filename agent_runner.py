@@ -261,6 +261,7 @@ def _ordenar_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Garante contexto antes de envio ao cliente; finalizar por último (se vier no lote)."""
     prioridade = {
         "buscar_contexto_cliente": 0,
+        "registrar_promessa_pagamento": 4,
         "cadastrar_cliente_pelo_documento": 3,
         "avisar_equipe_escalonamento": 8,
         "enviar_mensagem_texto_ao_cliente": 10,
@@ -352,6 +353,25 @@ def run_agent_turn(
             return _post_tool(
                 http,
                 "/agente-atendimento/tools/enviar-recibo",
+                body,
+                correlation_id=cid,
+            )
+
+        def tool_registrar_promessa_pagamento(
+            contrato_plano_id: int,
+            data_promessa: str,
+            horario_lembrete: str | None = None,
+        ) -> str:
+            body: dict[str, Any] = {
+                "conversation_id": conversation_id,
+                "contrato_plano_id": int(contrato_plano_id),
+                "data_promessa": str(data_promessa).strip()[:10],
+            }
+            if horario_lembrete is not None and str(horario_lembrete).strip() != "":
+                body["horario_lembrete"] = str(horario_lembrete).strip()[:8]
+            return _post_tool(
+                http,
+                "/agente-atendimento/tools/registrar-promessa-pagamento",
                 body,
                 correlation_id=cid,
             )
@@ -491,6 +511,40 @@ def run_agent_turn(
             {
                 "type": "function",
                 "function": {
+                    "name": "registrar_promessa_pagamento",
+                    "description": (
+                        "Registra promessa/agendamento de pagamento futuro do cliente: grava "
+                        '"Suspender envio de mensagens até" no contrato e agenda lembrete automático na data. '
+                        "Use quando o cliente disser que VAI PAGAR em data futura (ex.: áudio 'só segunda-feira', "
+                        "'pago dia 10', 'semana que vem'). Calcule data_promessa em Y-m-d: se hoje já é o dia da semana "
+                        "citado, use a PRÓXIMA ocorrência (ex.: hoje segunda + 'segunda vou pagar' → próxima segunda). "
+                        "horario_lembrete padrão 14:00 se não citou horário. Chame ANTES de confirmar ao cliente. "
+                        "contrato_plano_id vem de contratos_ativos[].id em buscar_contexto_cliente."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "contrato_plano_id": {
+                                "type": "integer",
+                                "description": "ID do contrato ativo (contratos_ativos[].id).",
+                            },
+                            "data_promessa": {
+                                "type": "string",
+                                "description": "Data combinada Y-m-d (ex.: 2026-07-13).",
+                            },
+                            "horario_lembrete": {
+                                "type": "string",
+                                "description": "Opcional. Horário H:i do lembrete (padrão 14:00).",
+                            },
+                        },
+                        "required": ["contrato_plano_id", "data_promessa"],
+                        "additionalProperties": False,
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "avisar_equipe_escalonamento",
                     "description": (
                         "OBRIGATÓRIO quando não souber responder ou precisar de humano: envia WhatsApp aos contatos "
@@ -572,6 +626,9 @@ def run_agent_turn(
 
         tool_dispatch: dict[str, Callable[..., str]] = {
             "buscar_contexto_cliente": lambda **_: tool_contexto(),
+            "registrar_promessa_pagamento": lambda contrato_plano_id, data_promessa, horario_lembrete=None, **_: tool_registrar_promessa_pagamento(
+                int(contrato_plano_id), str(data_promessa), horario_lembrete
+            ),
             "avisar_equipe_escalonamento": lambda motivo, resumo=None, **_: tool_avisar_equipe_escalonamento(
                 str(motivo), str(resumo) if resumo is not None else None
             ),
@@ -643,7 +700,9 @@ def run_agent_turn(
             "NUNCA use o nome do perfil WhatsApp (ex.: Agente, Treino) — só nome_cliente_ja_informado informado pelo cliente. "
             "ANTES DE RESPONDER: leia tipo_mensagem_cliente_rodada e instrucao_entender_tipo_mensagem_rodada no prefixo/contexto. "
             "Se tipo_mensagem_cliente_rodada for audio: o cliente mandou ÁUDIO (transcrição no texto) — NÃO é documento/imagem nesta rodada; "
-            "interprete o que foi dito. PROIBIDO dizer que não conseguiu ler documento ou pedir foto legível sem arquivo nesta rodada. "
+            "interprete o que foi dito e responda ao assunto (promessa de pagamento, dúvida, cumprimento). "
+            "Se for promessa de pagamento com data futura, chame registrar_promessa_pagamento antes de enviar_mensagem_texto_ao_cliente — "
+            "veja instrucao_promessa_pagamento_whatsapp. PROIBIDO dizer que não conseguiu ler documento ou pedir foto legível sem arquivo nesta rodada. "
             "Se cliente_prometeu_enviar_documento_nesta_rodada for true: o cliente avisou que VAI enviar documentação — agradeça e aguarde; "
             "PROIBIDO tratar como se o arquivo já tivesse chegado ou pedir reenvio por leitura falha. "
             "Se saudacao_sem_pedido_rodada for true e documento_foco_rodada for false: o cliente mandou só cumprimento (bom dia, tudo bem). "
