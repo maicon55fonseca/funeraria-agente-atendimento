@@ -112,6 +112,20 @@ def _post_tool(
     return json.dumps(out, ensure_ascii=False)
 
 
+MARCADOR_MENSAGEM_REVISAO_ATENDENTE_INATIVO = "[SISTEMA — REVISÃO ATENDIMENTO ATENDENTE INATIVO]"
+
+
+def _eh_mensagem_revisao_atendente_inativo(mensagem: str) -> bool:
+    """Mensagem sintética (não é do cliente) usada quando o atendente humano fica inativo.
+
+    Mesmo marcador usado por AgenteAtendimentoInboundRunner::MARCADOR_MENSAGEM_REVISAO_ATENDENTE_INATIVO
+    no Laravel. Nesse modo não deve haver fallback de "resposta genérica ao cliente": se a IA não
+    chamar nenhuma ferramenta de entrega, significa que ela decidiu que nada precisa ser enviado
+    (ex.: já finalizou a conversa por estar resolvida).
+    """
+    return MARCADOR_MENSAGEM_REVISAO_ATENDENTE_INATIVO in (mensagem or "")
+
+
 TOOLS_ENTREGA_AO_CLIENTE = frozenset(
     {
         "enviar_mensagem_texto_ao_cliente",
@@ -1046,46 +1060,55 @@ def run_agent_turn(
                 break
 
         if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
-            if _texto_pediu_dados_pagamento(user_message):
-                ctx_payload = tool_contexto()
-                parcela_ids = _extrair_parcela_ids_contexto(ctx_payload)
-                if parcela_ids:
-                    boleto_payload = tool_enviar_boleto(parcela_ids=parcela_ids)
-                    if _tool_resposta_foi_sucesso(boleto_payload):
-                        logger.info(
-                            "[agente] envio_boleto_fallback_pedido_explicito correlation_id=%s conversation_id=%s parcela_ids=%s",
-                            cid,
-                            conversation_id,
-                            parcela_ids,
-                        )
-                        entregou_algo_ao_cliente_whatsapp = True
+            eh_revisao_atendente_inativo = _eh_mensagem_revisao_atendente_inativo(user_message)
 
-            if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
-                msg = (last_text or "").strip()
-                if not msg:
-                    if _texto_pediu_dados_pagamento(user_message):
-                        msg = (
-                            "Entendi que você precisa dos dados para pagamento. "
-                            "Vou verificar suas parcelas em aberto e já te retorno."
-                        )
-                    else:
-                        msg = (
-                            "Recebi sua mensagem. O que você precisa — contrato, parcela, boleto ou outra dúvida? "
-                            "Se puder, responda em uma frase."
-                        )
+            if eh_revisao_atendente_inativo:
                 logger.info(
-                    "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
+                    "[agente] revisao_atendente_inativo_sem_acao_ao_cliente correlation_id=%s conversation_id=%s",
                     cid,
                     conversation_id,
-                    len(msg),
                 )
-                _post_tool(
-                    http,
-                    "/agente-atendimento/tools/enviar-texto",
-                    {"conversation_id": conversation_id, "texto": msg},
-                    correlation_id=cid,
-                )
-                last_text = msg
+            else:
+                if _texto_pediu_dados_pagamento(user_message):
+                    ctx_payload = tool_contexto()
+                    parcela_ids = _extrair_parcela_ids_contexto(ctx_payload)
+                    if parcela_ids:
+                        boleto_payload = tool_enviar_boleto(parcela_ids=parcela_ids)
+                        if _tool_resposta_foi_sucesso(boleto_payload):
+                            logger.info(
+                                "[agente] envio_boleto_fallback_pedido_explicito correlation_id=%s conversation_id=%s parcela_ids=%s",
+                                cid,
+                                conversation_id,
+                                parcela_ids,
+                            )
+                            entregou_algo_ao_cliente_whatsapp = True
+
+                if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
+                    msg = (last_text or "").strip()
+                    if not msg:
+                        if _texto_pediu_dados_pagamento(user_message):
+                            msg = (
+                                "Entendi que você precisa dos dados para pagamento. "
+                                "Vou verificar suas parcelas em aberto e já te retorno."
+                            )
+                        else:
+                            msg = (
+                                "Recebi sua mensagem. O que você precisa — contrato, parcela, boleto ou outra dúvida? "
+                                "Se puder, responda em uma frase."
+                            )
+                    logger.info(
+                        "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
+                        cid,
+                        conversation_id,
+                        len(msg),
+                    )
+                    _post_tool(
+                        http,
+                        "/agente-atendimento/tools/enviar-texto",
+                        {"conversation_id": conversation_id, "texto": msg},
+                        correlation_id=cid,
+                    )
+                    last_text = msg
 
         logger.info(
             "[agente] openai_output_final correlation_id=%s conversation_id=%s chars=%s texto=%s",
