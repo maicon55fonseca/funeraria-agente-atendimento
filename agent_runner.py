@@ -816,6 +816,8 @@ def run_agent_turn(
             "informe o cliente com cordialidade e NÃO invente boleto. Se não souber responder ou a informação não estiver nas abas do modo IA Central: "
             "chame avisar_equipe_escalonamento (motivo + resumo com APENAS a pergunta do cliente) ANTES de enviar_mensagem_texto_ao_cliente; "
             "ao cliente envie SOMENTE: «Um momento, vou verificar pra você, já volto a falar com você.» — PROIBIDO pitch de vendas ou inventar resposta. "
+            "PROIBIDO chamar avisar_equipe_escalonamento ou enviar a mensagem de verificação quando o cliente só agradeceu, confirmou que está tudo certo, "
+            "se despediu ou encerrou o assunto — nesses casos responda de forma breve e cordial (em áudio se a conversa for em áudio) e NÃO diga que vai verificar. "
             "O sistema também avisa automaticamente os contatos de escalonamento quando você promete verificar; use a ferramenta para reforço. "
             "Modo áudio: se buscar_contexto_cliente retornar deve_usar_instrucoes_audio_agora=true, "
             "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
