@@ -714,6 +714,7 @@ def run_agent_turn(
             "NUNCA use o nome do perfil WhatsApp (ex.: Agente, Treino) — só nome_cliente_ja_informado informado pelo cliente. "
             "ANTES DE RESPONDER: leia tipo_mensagem_cliente_rodada e instrucao_entender_tipo_mensagem_rodada no prefixo/contexto. "
             "Se tipo_mensagem_cliente_rodada for audio: o cliente mandou ÁUDIO (transcrição no texto) — NÃO é documento/imagem nesta rodada; "
+            "leia transcricao_mensagem_atual_rodada no contexto e responda EXCLUSIVAMENTE ao que foi dito nessa transcrição; "
             "interprete o que foi dito e responda ao assunto (promessa de pagamento, dúvida, cumprimento). "
             "Se for promessa de pagamento com data futura, chame registrar_promessa_pagamento antes de enviar_mensagem_texto_ao_cliente — "
             "veja instrucao_promessa_pagamento_whatsapp. PROIBIDO dizer que não conseguiu ler documento ou pedir foto legível sem arquivo nesta rodada. "
