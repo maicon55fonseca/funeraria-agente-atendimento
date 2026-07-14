@@ -1088,30 +1088,32 @@ def run_agent_turn(
 
                 if not entregou_algo_ao_cliente_whatsapp and not tentou_enviar_texto_whatsapp:
                     msg = (last_text or "").strip()
-                    if not msg:
-                        if _texto_pediu_dados_pagamento(user_message):
-                            msg = (
-                                "Entendi que você precisa dos dados para pagamento. "
-                                "Vou verificar suas parcelas em aberto e já te retorno."
-                            )
-                        else:
-                            msg = (
-                                "Recebi sua mensagem. O que você precisa — contrato, parcela, boleto ou outra dúvida? "
-                                "Se puder, responda em uma frase."
-                            )
-                    logger.info(
-                        "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
-                        cid,
-                        conversation_id,
-                        len(msg),
-                    )
-                    _post_tool(
-                        http,
-                        "/agente-atendimento/tools/enviar-texto",
-                        {"conversation_id": conversation_id, "texto": msg},
-                        correlation_id=cid,
-                    )
-                    last_text = msg
+                    if not msg and _texto_pediu_dados_pagamento(user_message):
+                        msg = (
+                            "Entendi que você precisa dos dados para pagamento. "
+                            "Vou verificar suas parcelas em aberto e já te retorno."
+                        )
+                    if msg:
+                        logger.info(
+                            "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
+                            cid,
+                            conversation_id,
+                            len(msg),
+                        )
+                        _post_tool(
+                            http,
+                            "/agente-atendimento/tools/enviar-texto",
+                            {"conversation_id": conversation_id, "texto": msg},
+                            correlation_id=cid,
+                        )
+                        last_text = msg
+                    else:
+                        logger.info(
+                            "[agente] silencio_sem_resposta_generica correlation_id=%s conversation_id=%s "
+                            "(sem texto contextual para a mensagem do cliente)",
+                            cid,
+                            conversation_id,
+                        )
 
         logger.info(
             "[agente] openai_output_final correlation_id=%s conversation_id=%s chars=%s texto=%s",
