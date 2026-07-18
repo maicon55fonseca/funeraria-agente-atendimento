@@ -827,6 +827,8 @@ def run_agent_turn(
             "ao cliente envie SOMENTE: «Um momento, vou verificar pra você, já volto a falar com você.» — PROIBIDO pitch de vendas ou inventar resposta. "
             "PROIBIDO chamar avisar_equipe_escalonamento ou enviar a mensagem de verificação quando o cliente só agradeceu, confirmou que está tudo certo, "
             "se despediu ou encerrou o assunto — nesses casos responda de forma breve e cordial (em áudio se a conversa for em áudio) e NÃO diga que vai verificar. "
+            "Cumprimento isolado (bom dia/boa tarde/oi): responda só com período + nome + 'tudo bem?' e aguarde; "
+            "PROIBIDO perguntar 'Como posso ajudar você hoje?' na primeira resposta ao cumprimento — só na mensagem seguinte se ainda não houver objetivo. "
             "O sistema também avisa automaticamente os contatos de escalonamento quando você promete verificar; use a ferramenta para reforço. "
             "Modo áudio: se buscar_contexto_cliente retornar deve_usar_instrucoes_audio_agora=true, "
             "aplique instrucoes_atendimento_audio do JSON (não só a aba Texto) para dependentes, filhos, casamento e inclusões. "
