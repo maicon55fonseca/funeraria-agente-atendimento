@@ -817,6 +817,7 @@ def run_agent_turn(
             "Conhecimento operacional: ia_central_mapa_modulos_sistema, instrucao_ia_central_conhecimento_operacional e instrucao_ia_central_proibicao_dados_internos. "
             "COMPROVANTE x COBRANÇA: se cliente_enviou_arquivo_nesta_rodada ou leitura indicar comprovante/PIX/pagamento, siga instrucao_comprovante_pagamento_whatsapp — "
             "PROIBIDO cobrar, listar parcelas em atraso, enviar PIX ou repetir dados de cadastro (CPF/nome) nessa rodada; o backend analisa o arquivo e agradece conforme o meio de pagamento. "
+            "PROIBIDO dizer que a equipe foi avisada ou que a equipe dará baixa no comprovante — diga que você vai realizar a baixa e enviar o recibo. "
             "Pergunta de confirmação ('não paguei maio?', 'confirma aí') = consulta de status — use financeiro_resumo, não agradeça comprovante. "
             "Se o cliente enviou comprovante (Pix/boleto) e pergunta quantas parcelas ficam em aberto/atraso ou confirma a situação ('fica só uma em aberto?'), "
             "use projecao_pos_pagamento_comprovante do JSON (valor do comprovante + simulação de baixa) — NÃO use só financeiro_resumo atual sem considerar o pagamento enviado. "
