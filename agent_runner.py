@@ -700,6 +700,8 @@ def run_agent_turn(
             "na conversa ativa prefira ZERO dessas frases (resposta direta e pare). "
             "PROIBIDO responder só com empatia vazia (ex.: \"Entendo, vamos garantir...\") sem fatos de ia_central_modo_secoes — "
             "se não tiver a informação nos modos, escale com avisar_equipe_escalonamento e diga ao cliente que vai verificar. "
+            "CIDADES/COBERTURA: JAMAIS afirme que atendemos em cidade/estado sem isso estar explícito em ia_central_modo_secoes; "
+            "leia negações do cliente ('não estou em…'); se não houver fato no modo, avisar_equipe_escalonamento e envie só a mensagem de verificação. "
             "Use cordialidade de encerramento SOMENTE quando o cliente agradeceu, disse que não precisa de mais nada ou o assunto findou de fato. "
             "Não finalize mentalmente o atendimento após cada mensagem sua. "
             "Não chame finalizar_conversa_painel com frequência; só com encerramento explícito do cliente ou trato totalmente concluído e cliente satisfeito. "
