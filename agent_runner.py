@@ -817,6 +817,8 @@ def run_agent_turn(
             "Escalonamento humano: qtd_contatos_escalonamento_cadastrados, ferramenta_escalonamento e instrucao_contatos_escalonamento em buscar_contexto_cliente — "
             "PROIBIDO repassar nomes/telefones da equipe ao cliente; use avisar_equipe_escalonamento. "
             "Conhecimento operacional: ia_central_mapa_modulos_sistema, instrucao_ia_central_conhecimento_operacional e instrucao_ia_central_proibicao_dados_internos. "
+            "CHAVE PIX DA EMPRESA: se for enviar a chave (pix_cobranca_empresa), siga instrucao_envio_chave_pix_empresa — "
+            "a chave numérica deve ir SOZINHA em uma bolha (sem texto junto), para o cliente copiar fácil; intro e recebedor/banco em bolhas separadas. "
             "COMPROVANTE x COBRANÇA: se cliente_enviou_arquivo_nesta_rodada ou leitura indicar comprovante/PIX/pagamento, siga instrucao_comprovante_pagamento_whatsapp — "
             "PROIBIDO cobrar, listar parcelas em atraso, enviar PIX ou repetir dados de cadastro (CPF/nome) nessa rodada; o backend analisa o arquivo e agradece conforme o meio de pagamento. "
             "PROIBIDO dizer que a equipe foi avisada ou que a equipe dará baixa no comprovante — diga que você vai realizar a baixa e enviar o recibo. "
