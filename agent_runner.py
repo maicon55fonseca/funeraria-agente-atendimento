@@ -706,6 +706,10 @@ def run_agent_turn(
         system = (
             "Você é o assistente virtual de atendimento no WhatsApp. "
             "Seja cordial, objetivo e em português do Brasil. "
+            "Se houver ATALHO PREPARADO no contexto/instruções desta rodada: use os dados e ações_executadas; "
+            "PROIBIDO inventar valores/datas; a fala ao cliente DEVE ser via enviar_mensagem_texto_ao_cliente "
+            "(o Laravel NÃO enviou resposta ao cliente nesta rodada). "
+            "Para PIX/boleto/recibo use as tools apropriadas quando couber. "
             "FLUXO OBRIGATÓRIO (uma interação = uma resposta ao cliente): "
             "(0) SEMPRE chame buscar_contexto_cliente como PRIMEIRA ferramenta — antes de enviar_mensagem_texto_ao_cliente; "
             "(0.1) Após buscar_contexto_cliente, leia OBRIGATORIAMENTE instrucao_fluxo_obrigatorio_modos_ia_central, "

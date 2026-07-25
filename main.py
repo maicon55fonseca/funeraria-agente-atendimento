@@ -46,6 +46,8 @@ class ProcessarBody(BaseModel):
     ia_central_classificador_fonte: str | None = None
     ia_central_llm_confianca: int | None = None
     ia_central_llm_resumo: str | None = None
+    atalho_preparado: dict | None = None
+    instrucao_atalho_preparado: str | None = Field(default=None, max_length=8000)
 
 
 def _checar_token(authorization: str | None) -> None:
@@ -182,6 +184,23 @@ def processar(
         if ia_fonte:
             ia_partes.append(f"classificador_fonte={ia_fonte}")
         extra_instr = "\n".join(ia_partes) + "\n\n" + extra_instr
+
+    if body.atalho_preparado:
+        import json as _json
+
+        atalho_json = _json.dumps(body.atalho_preparado, ensure_ascii=False, default=str)
+        instr_atalho = (body.instrucao_atalho_preparado or "").strip()
+        bloco_atalho = (
+            "=== ATALHO PREPARADO PELO LARAVEL (NÃO É RESPOSTA AO CLIENTE) ===\n"
+            + (instr_atalho + "\n" if instr_atalho else "")
+            + atalho_json
+        )
+        extra_instr = bloco_atalho + "\n\n" + extra_instr
+        logger.info(
+            "[agente] atalho_preparado_recebido correlation_id=%s codigo=%s",
+            cid,
+            (body.atalho_preparado or {}).get("codigo"),
+        )
 
     if body.deve_usar_instrucoes_audio_agora and audio_bloco:
         extra_instr = (
