@@ -199,7 +199,10 @@ def processar(
         )
 
     max_extra_instr = 18000
+    instr_truncada = False
+    chars_instr_original = len(extra_instr)
     if len(extra_instr) > max_extra_instr:
+        instr_truncada = True
         logger.warning(
             "[agente] extra_instr_truncada correlation_id=%s chars_original=%s chars_final=%s",
             cid,
@@ -232,6 +235,23 @@ def processar(
     out_output = ""
     if isinstance(out, dict):
         out_output = str(out.get("output") or "")
+        debug = out.get("debug_chatgpt")
+        if not isinstance(debug, dict):
+            debug = {}
+            out["debug_chatgpt"] = debug
+        alteracoes = debug.get("alteracoes_python")
+        if not isinstance(alteracoes, list):
+            alteracoes = []
+        if instr_truncada:
+            alteracoes.append(
+                {
+                    "tipo": "instrucoes_truncadas_no_python",
+                    "chars_original": chars_instr_original,
+                    "chars_final": max_extra_instr,
+                }
+            )
+        debug["alteracoes_python"] = alteracoes
+        out["debug_chatgpt"] = debug
     preview = (out_output[:6000] + "…") if len(out_output) > 6000 else out_output
     logger.info(
         "[agente] processar_concluido_ok correlation_id=%s conversation_id=%s duracao_ms=%s "

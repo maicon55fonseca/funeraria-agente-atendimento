@@ -24,6 +24,44 @@ def _safe_log_text(s: str, max_len: int = 4000) -> str:
     return t[: max_len - 3] + "..."
 
 
+def _serialize_lc_messages(messages: list[Any], content_max: int = 40000) -> list[dict[str, Any]]:
+    """Serializa o prompt exato (lista de mensagens) enviado ao modelo."""
+    out: list[dict[str, Any]] = []
+    for m in messages:
+        if isinstance(m, SystemMessage):
+            role = "system"
+        elif isinstance(m, HumanMessage):
+            role = "user"
+        elif isinstance(m, AIMessage):
+            role = "assistant"
+        elif isinstance(m, ToolMessage):
+            role = "tool"
+        else:
+            role = type(m).__name__
+
+        content = str(getattr(m, "content", "") or "")
+        if len(content) > content_max:
+            content = content[:content_max] + "...[truncado_para_debug]"
+
+        item: dict[str, Any] = {"role": role, "content": content}
+        if isinstance(m, AIMessage):
+            tcs = getattr(m, "tool_calls", None) or []
+            if tcs:
+                item["tool_calls"] = [
+                    {
+                        "id": str(tc.get("id") or ""),
+                        "name": str(tc.get("name") or ""),
+                        "args": dict(tc.get("args") or {}),
+                    }
+                    for tc in tcs
+                    if isinstance(tc, dict)
+                ]
+        if isinstance(m, ToolMessage):
+            item["tool_call_id"] = getattr(m, "tool_call_id", None)
+        out.append(item)
+    return out
+
+
 def _log_tool_args_para_diagnostico(cid: str, turn: int, name: str, args: dict[str, Any]) -> None:
     """Diagnóstico: o que o modelo pediu às tools (especialmente texto ao cliente)."""
     if name == "enviar_mensagem_texto_ao_cliente":
@@ -865,9 +903,15 @@ def run_agent_turn(
             SystemMessage(content=system),
             HumanMessage(content=user_message),
         ]
+        prompt_mensagens_iniciais = _serialize_lc_messages(messages)
+        debug_turnos: list[dict[str, Any]] = []
+        alteracoes_python: list[dict[str, Any]] = []
+        textos_tool_enviar_texto: list[str] = []
+        respostas_brutas_por_turno: list[dict[str, Any]] = []
 
         max_turns = 4
         last_text = ""
+        last_raw_ai = ""
         entregou_algo_ao_cliente_whatsapp = False
         tentou_enviar_texto_whatsapp = False
         contexto_obtido_no_turno: int | None = None
@@ -883,6 +927,13 @@ def run_agent_turn(
                     entregou_algo_ao_cliente_whatsapp,
                     tentou_enviar_texto_whatsapp,
                 )
+                alteracoes_python.append(
+                    {
+                        "tipo": "parada_apos_entrega",
+                        "turn": turn,
+                        "detalhe": "Loop interrompido porque já houve entrega/tentativa de texto ao WhatsApp.",
+                    }
+                )
                 break
 
             if (
@@ -897,12 +948,54 @@ def run_agent_turn(
                     contexto_obtido_no_turno,
                     turn,
                 )
+                alteracoes_python.append(
+                    {
+                        "tipo": "parada_max_apos_contexto",
+                        "turn": turn,
+                        "detalhe": "Loop interrompido após obter contexto (limite de rodadas).",
+                    }
+                )
                 break
 
+            prompt_antes_invoke = _serialize_lc_messages(messages)
             ai: AIMessage = llm_tools.invoke(messages)
             messages.append(ai)
             calls = getattr(ai, "tool_calls", None) or []
             raw_content = str(ai.content or "").strip()
+            last_raw_ai = raw_content
+            respostas_brutas_por_turno.append(
+                {
+                    "turn": turn,
+                    "content": raw_content,
+                    "tool_calls": [
+                        {
+                            "id": str(tc.get("id") or ""),
+                            "name": str(tc.get("name") or ""),
+                            "args": dict(tc.get("args") or {}),
+                        }
+                        for tc in calls
+                        if isinstance(tc, dict)
+                    ],
+                }
+            )
+            debug_turnos.append(
+                {
+                    "turn": turn,
+                    "prompt_enviado_ao_modelo": prompt_antes_invoke,
+                    "resposta_bruta_modelo": {
+                        "content": raw_content,
+                        "tool_calls": [
+                            {
+                                "id": str(tc.get("id") or ""),
+                                "name": str(tc.get("name") or ""),
+                                "args": dict(tc.get("args") or {}),
+                            }
+                            for tc in calls
+                            if isinstance(tc, dict)
+                        ],
+                    },
+                }
+            )
             logger.info(
                 "[agente] openai_turn correlation_id=%s turn=%s conversation_id=%s "
                 "tem_tool_calls=%s content_chars=%s content=%s",
@@ -987,6 +1080,13 @@ def run_agent_turn(
                         turn,
                         conversation_id,
                     )
+                    alteracoes_python.append(
+                        {
+                            "tipo": "enviar_texto_ignorado_apos_cobranca",
+                            "turn": turn,
+                            "texto_ignorado": str(args.get("texto") or ""),
+                        }
+                    )
                     payload = json.dumps(
                         {
                             "ok": True,
@@ -1009,6 +1109,13 @@ def run_agent_turn(
                         conversation_id,
                         tid,
                     )
+                    alteracoes_python.append(
+                        {
+                            "tipo": "enviar_texto_duplicado_bloqueado",
+                            "turn": turn,
+                            "texto_ignorado": str(args.get("texto") or ""),
+                        }
+                    )
                     payload = json.dumps(
                         {
                             "ok": True,
@@ -1026,6 +1133,13 @@ def run_agent_turn(
                         cid,
                         turn,
                         conversation_id,
+                    )
+                    alteracoes_python.append(
+                        {
+                            "tipo": "enviar_texto_bloqueado_ja_tentou",
+                            "turn": turn,
+                            "texto_ignorado": str(args.get("texto") or ""),
+                        }
                     )
                     payload = json.dumps(
                         {
@@ -1055,6 +1169,7 @@ def run_agent_turn(
                             if name == "enviar_mensagem_texto_ao_cliente":
                                 texto_whatsapp_ja_enviado_neste_batch = True
                                 last_text = str(args.get("texto") or "")
+                                textos_tool_enviar_texto.append(last_text)
                         if name == "enviar_mensagem_texto_ao_cliente":
                             tentou_enviar_texto_whatsapp = True
                     except Exception as exc:  # noqa: BLE001
@@ -1110,12 +1225,26 @@ def run_agent_turn(
                             "Entendi que você precisa dos dados para pagamento. "
                             "Vou verificar suas parcelas em aberto e já te retorno."
                         )
+                        alteracoes_python.append(
+                            {
+                                "tipo": "fallback_texto_pagamento_sintetico",
+                                "detalhe": "Python gerou texto padrão porque o modelo não devolveu conteúdo.",
+                                "texto": msg,
+                            }
+                        )
                     if msg:
                         logger.info(
                             "[agente] envio_whatsapp_fallback correlation_id=%s conversation_id=%s chars=%s",
                             cid,
                             conversation_id,
                             len(msg),
+                        )
+                        alteracoes_python.append(
+                            {
+                                "tipo": "envio_whatsapp_fallback",
+                                "detalhe": "Python enviou texto via fallback (sem tool enviar_mensagem no turno).",
+                                "texto": msg,
+                            }
                         )
                         _post_tool(
                             http,
@@ -1124,12 +1253,19 @@ def run_agent_turn(
                             correlation_id=cid,
                         )
                         last_text = msg
+                        textos_tool_enviar_texto.append(msg)
                     else:
                         logger.info(
                             "[agente] silencio_sem_resposta_generica correlation_id=%s conversation_id=%s "
                             "(sem texto contextual para a mensagem do cliente)",
                             cid,
                             conversation_id,
+                        )
+                        alteracoes_python.append(
+                            {
+                                "tipo": "silencio_sem_envio",
+                                "detalhe": "Python não enviou mensagem ao cliente nesta rodada.",
+                            }
                         )
 
         logger.info(
@@ -1146,4 +1282,22 @@ def run_agent_turn(
             conversation_id,
         )
 
-        return {"ok": True, "output": last_text}
+        resposta_bruta_final = last_raw_ai if last_raw_ai else (last_text or "")
+        return {
+            "ok": True,
+            "output": last_text,
+            "debug_chatgpt": {
+                "modelo": model_name,
+                "prompt_enviado_chatgpt": {
+                    "mensagens_iniciais": prompt_mensagens_iniciais,
+                    "turnos": debug_turnos,
+                },
+                "resposta_bruta_chatgpt": {
+                    "por_turno": respostas_brutas_por_turno,
+                    "final_content": resposta_bruta_final,
+                    "output_usado_pelo_agente": last_text or "",
+                },
+                "alteracoes_python": alteracoes_python,
+                "textos_solicitados_enviar_texto": textos_tool_enviar_texto,
+            },
+        }
