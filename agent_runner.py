@@ -39,11 +39,34 @@ def _serialize_lc_messages(messages: list[Any], content_max: int = 40000) -> lis
         else:
             role = type(m).__name__
 
-        content = str(getattr(m, "content", "") or "")
-        if len(content) > content_max:
-            content = content[:content_max] + "...[truncado_para_debug]"
-
-        item: dict[str, Any] = {"role": role, "content": content}
+        content = getattr(m, "content", "") or ""
+        if isinstance(content, list):
+            safe_parts: list[dict[str, Any]] = []
+            for p in content:
+                if not isinstance(p, dict):
+                    continue
+                if p.get("type") == "image_url":
+                    url = str((p.get("image_url") or {}).get("url") or "")
+                    safe_parts.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": (url[:32] + "...[data_url_omitido]") if url.startswith("data:") else url[:120],
+                                "detail": (p.get("image_url") or {}).get("detail"),
+                            },
+                        }
+                    )
+                else:
+                    txt = str(p.get("text") or "")
+                    if len(txt) > content_max:
+                        txt = txt[:content_max] + "...[truncado_para_debug]"
+                    safe_parts.append({"type": p.get("type") or "text", "text": txt})
+            item: dict[str, Any] = {"role": role, "content": safe_parts}
+        else:
+            content_s = str(content)
+            if len(content_s) > content_max:
+                content_s = content_s[:content_max] + "...[truncado_para_debug]"
+            item = {"role": role, "content": content_s}
         if isinstance(m, AIMessage):
             tcs = getattr(m, "tool_calls", None) or []
             if tcs:
@@ -329,6 +352,36 @@ def _ordenar_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(calls, key=_chave)
 
 
+def _conteudo_humano(user_message: str, mensagem_multimodal: list[dict[str, Any]] | None) -> Any:
+    if isinstance(mensagem_multimodal, list) and mensagem_multimodal:
+        partes: list[dict[str, Any]] = []
+        for p in mensagem_multimodal:
+            if not isinstance(p, dict):
+                continue
+            tipo = str(p.get("type") or "")
+            if tipo == "image_url" and isinstance(p.get("image_url"), dict):
+                url = str((p.get("image_url") or {}).get("url") or "")
+                if url.startswith("data:image/"):
+                    partes.append(
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": url,
+                                "detail": str((p.get("image_url") or {}).get("detail") or "auto"),
+                            },
+                        }
+                    )
+            elif tipo == "text":
+                txt = str(p.get("text") or "").strip()
+                if txt:
+                    partes.append({"type": "text", "text": txt})
+        if any(x.get("type") == "image_url" for x in partes) or len(partes) > 1:
+            if not any(x.get("type") == "text" for x in partes) and (user_message or "").strip():
+                partes.insert(0, {"type": "text", "text": user_message})
+            return partes
+    return user_message
+
+
 def run_agent_turn(
     *,
     laravel_api_base: str,
@@ -341,6 +394,7 @@ def run_agent_turn(
     openai_base_url: str | None = None,
     correlation_id: str | None = None,
     deve_usar_instrucoes_audio: bool = False,
+    mensagem_multimodal: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     cid = (correlation_id or "").strip() or "-"
     base = laravel_api_base.rstrip("/")
@@ -748,8 +802,9 @@ def run_agent_turn(
             "Não finalize mentalmente o atendimento após cada mensagem sua. "
             "Não chame finalizar_conversa_painel com frequência; só com encerramento explícito do cliente ou trato totalmente concluído e cliente satisfeito. "
             "Se a mensagem do cliente for só um marcador como [áudio], [imagem], [vídeo], [documento], [documento: arquivo.pdf], [sticker] ou [modelo], "
-            "significa que ele enviou esse tipo de mídia (muitas vezes sem legenda): reconheça isso, responda de forma útil "
-            "via enviar_mensagem_texto_ao_cliente e, se precisar de detalhes, peça que escreva por texto ou use buscar_contexto_cliente. "
+            "verifique se esta chamada traz a mídia anexada (partes image_url). Se houver imagem anexada, interprete o conteúdo visual — "
+            "o marcador não significa mensagem vazia. Só peça reenvio se a interpretação técnica tiver falhado. "
+            "Sem mídia anexada, reconheça o tipo e peça detalhes por texto se precisar. "
             "Se mensagem_anterior_enviada_pela_empresa for true OU conversa_iniciada_pela_empresa for true: "
             "a empresa enviou o comprovante/mensagem anterior — PROIBIDO perguntar o que fazer com imagem ou documento; "
             "não reaja a arquivos enviados pela empresa; só responda se o cliente fez um pedido claro (boleto, plano, cadastro, etc.). "
@@ -874,6 +929,9 @@ def run_agent_turn(
             "informe o cliente com cordialidade e NÃO invente boleto. Se não souber responder ou a informação não estiver nas abas do modo IA Central: "
             "chame avisar_equipe_escalonamento (motivo + resumo com APENAS a pergunta do cliente) ANTES de enviar_mensagem_texto_ao_cliente; "
             "ao cliente envie SOMENTE: «Um momento, vou verificar pra você, já volto a falar com você.» — PROIBIDO pitch de vendas ou inventar resposta. "
+            "EXCEÇÃO: se esta rodada tiver mídia anexada (imagem/PDF), NÃO escale só porque faltou legenda, o texto está vazio ou o pré-processador marcou tipo genérico — "
+            "primeiro interprete o que você vê. Escalone só se, após ver a mídia, a dúvida continuar fora das abas e das tools. "
+            "Ver a mídia NÃO autoriza baixa financeira nem alteração cadastral. "
             "PROIBIDO chamar avisar_equipe_escalonamento ou enviar a mensagem de verificação quando o cliente só agradeceu, confirmou que está tudo certo, "
             "se despediu ou encerrou o assunto — nesses casos responda de forma breve e cordial (em áudio se a conversa for em áudio) e NÃO diga que vai verificar. "
             "Cumprimento isolado (bom dia/boa tarde/oi): responda só com período + nome + 'tudo bem?' e aguarde; "
@@ -903,9 +961,20 @@ def run_agent_turn(
             )
         )
 
+        human_content = _conteudo_humano(user_message, mensagem_multimodal)
+        qtd_img = 0
+        if isinstance(human_content, list):
+            qtd_img = sum(1 for p in human_content if isinstance(p, dict) and p.get("type") == "image_url")
+        logger.info(
+            "[agente] human_message_montada correlation_id=%s conversation_id=%s multimodal=%s imagens=%s",
+            cid,
+            conversation_id,
+            "sim" if isinstance(human_content, list) else "nao",
+            qtd_img,
+        )
         messages: list[Any] = [
             SystemMessage(content=system),
-            HumanMessage(content=user_message),
+            HumanMessage(content=human_content),
         ]
         prompt_mensagens_iniciais = _serialize_lc_messages(messages)
         debug_turnos: list[dict[str, Any]] = []

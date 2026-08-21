@@ -48,6 +48,8 @@ class ProcessarBody(BaseModel):
     ia_central_llm_resumo: str | None = None
     atalho_preparado: dict | None = None
     instrucao_atalho_preparado: str | None = Field(default=None, max_length=8000)
+    mensagem_multimodal: list[dict] | None = None
+    rodada_multimodal: bool = False
 
 
 def _checar_token(authorization: str | None) -> None:
@@ -132,7 +134,8 @@ def processar(
 
     logger.info(
         "[agente] processar_corpo_ok correlation_id=%s conversation_id=%s whatsapp_message_id=%s "
-        "empresa_id=%s corporacao_id=%s laravel_api_base=%s openai_origem=%s instrucoes_chars=%s mensagem_chars=%s",
+        "empresa_id=%s corporacao_id=%s laravel_api_base=%s openai_origem=%s instrucoes_chars=%s "
+        "mensagem_chars=%s modo=%s multimodal_partes=%s",
         cid,
         body.conversation_id,
         body.whatsapp_message_id,
@@ -142,6 +145,8 @@ def processar(
         openai_origem,
         instr_len,
         texto_len,
+        "multimodal" if body.mensagem_multimodal else "texto",
+        len(body.mensagem_multimodal or []) if body.mensagem_multimodal else 0,
     )
 
     extra_instr = (body.instrucoes_atendimento or "").strip()
@@ -245,6 +250,7 @@ def processar(
             openai_base_url=(body.openai_base_url or "").strip() or None,
             correlation_id=cid,
             deve_usar_instrucoes_audio=body.deve_usar_instrucoes_audio_agora,
+            mensagem_multimodal=body.mensagem_multimodal,
         )
     except Exception:
         logger.exception("[agente] processar_run_agent_falhou correlation_id=%s", cid)
