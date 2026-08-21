@@ -21,7 +21,7 @@ class ProcessarBody(BaseModel):
     laravel_api_base: str = Field(..., min_length=8, description="Ex.: https://seu-backend/api")
     conversation_id: int = Field(..., ge=1)
     whatsapp_message_id: int = Field(..., ge=1)
-    mensagem_texto: str = Field(..., min_length=1, max_length=8000)
+    mensagem_texto: str = Field(..., min_length=1, max_length=24000)
     empresa_id: int = Field(..., ge=1)
     corporacao_id: int | None = None
     openai_api_key: str | None = None
