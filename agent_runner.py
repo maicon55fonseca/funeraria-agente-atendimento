@@ -905,7 +905,7 @@ def run_agent_turn(
             "Chave PIX institucional só se o cliente pedir a chave da empresa; a chave já existe — NÃO diga que vai gerar PIX. "
             "Use enviar_link_boleto_parcela com parcela_id ou parcela_ids "
             "(parcelas em atraso = parcelas_em_atraso_lista; parcelas a vencer = itens de parcelas_em_aberto_lista com em_atraso=false). "
-            "NÃO reenvie a mesma parcela se a tool retornar skipped_duplicate — diga que já enviou há pouco. "
+            "NÃO reenvie a mesma parcela se a tool retornar skipped_duplicate — não envie texto ao cliente; motivo_interno é só diagnóstico. "
             "Não envie texto depois repetindo link/linha/PIX — a ferramenta já manda em bolhas separadas. "
             "Para 'de qual mês é essa parcela', use mes_referencia_vencimento do item correspondente. "
             "Para valor da mensalidade, quanto paga ou preço do plano, siga instrucao_valor_mensalidade_cliente e o objeto contratos_ativos em buscar_contexto_cliente. "
@@ -1156,7 +1156,11 @@ def run_agent_turn(
                         {
                             "ok": True,
                             "skipped_duplicate": True,
-                            "message": "Já houve entrega ao cliente nesta interação; não envie outra mensagem.",
+                            "nao_enviar_ao_cliente": True,
+                            "mensagem_cliente": "",
+                            "codigo_resultado": "bloqueado_duplicata_entrega",
+                            "motivo_interno": "Já houve entrega ao cliente nesta interação.",
+                            "message": "skipped_duplicate",
                         },
                         ensure_ascii=False,
                     )
@@ -1181,10 +1185,11 @@ def run_agent_turn(
                         {
                             "ok": True,
                             "skipped": True,
-                            "message": (
-                                "Dados de boleto/PIX já foram enviados nesta interação. "
-                                "Não envie mensagem de texto repetindo ou confirmando o envio."
-                            ),
+                            "nao_enviar_ao_cliente": True,
+                            "mensagem_cliente": "",
+                            "codigo_resultado": "bloqueado_texto_apos_cobranca",
+                            "motivo_interno": "Dados de boleto/PIX já foram enviados nesta interação.",
+                            "message": "skipped_duplicate",
                         },
                         ensure_ascii=False,
                     )
@@ -1210,7 +1215,11 @@ def run_agent_turn(
                         {
                             "ok": True,
                             "skipped_duplicate": True,
-                            "message": "Mensagem ao cliente já enviada nesta rodada; não chame esta ferramenta duas vezes.",
+                            "nao_enviar_ao_cliente": True,
+                            "mensagem_cliente": "",
+                            "codigo_resultado": "bloqueado_texto_duplicado_rodada",
+                            "motivo_interno": "Mensagem ao cliente já enviada nesta rodada.",
+                            "message": "skipped_duplicate",
                         },
                         ensure_ascii=False,
                     )
@@ -1235,10 +1244,11 @@ def run_agent_turn(
                         {
                             "ok": True,
                             "skipped_duplicate": True,
-                            "message": (
-                                "Já houve tentativa de enviar mensagem ao cliente nesta interação. "
-                                "Aguarde a resposta do cliente — não envie outra bolha."
-                            ),
+                            "nao_enviar_ao_cliente": True,
+                            "mensagem_cliente": "",
+                            "codigo_resultado": "bloqueado_texto_ja_tentou",
+                            "motivo_interno": "Já houve tentativa de enviar mensagem ao cliente nesta interação.",
+                            "message": "skipped_duplicate",
                         },
                         ensure_ascii=False,
                     )
