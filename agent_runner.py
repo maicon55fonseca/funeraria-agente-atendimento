@@ -432,6 +432,7 @@ def run_agent_turn(
         def tool_enviar_boleto(
             parcela_id: int | None = None,
             parcela_ids: list | None = None,
+            data_vencimento_boleto: str | None = None,
             **_: Any,
         ) -> str:
             body: dict[str, Any] = {"conversation_id": conversation_id}
@@ -445,6 +446,10 @@ def run_agent_turn(
                     {"erro": "Informe parcela_id (uma parcela) ou parcela_ids (várias)."},
                     ensure_ascii=False,
                 )
+            nova_data = (data_vencimento_boleto or "").strip()
+            if nova_data:
+                body["data_vencimento_boleto"] = nova_data
+                body["formato"] = "link"
             return _post_tool(
                 http,
                 "/agente-atendimento/tools/enviar-boleto",
@@ -589,6 +594,16 @@ def run_agent_turn(
                                 "type": "array",
                                 "items": {"type": "integer"},
                                 "description": "Várias parcelas em aberto — cada uma com boleto/PIX separado (máx. 8).",
+                            },
+                            "data_vencimento_boleto": {
+                                "type": "string",
+                                "description": (
+                                    "Y-m-d. Use quando o cliente indicar QUANDO pretende pagar e quiser o boleto com essa data "
+                                    "(inclusive parcela já vencida): a cobrança é reemitida com esse vencimento. "
+                                    "Isso é diferente da data que apenas IDENTIFICA qual parcela ele quer — nesse caso não preencha. "
+                                    "Resolva datas relativas (amanhã, dia da semana, final do mês) usando a data de hoje do contexto. "
+                                    "Limite: entre hoje e 30 dias à frente. O vencimento original da parcela não muda no sistema."
+                                ),
                             },
                         },
                         "required": [],
